@@ -1,0 +1,23 @@
+# Never commit secrets. Keys and env files must stay out of the repo.
+.env
+.env.*
+*.key
+*.pem
+secrets.*
+credentials.*
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
