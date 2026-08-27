@@ -36,9 +36,10 @@ flowchart LR
     C[Customer] -->|3. pays Bitcoin| ADDR
     ADDR ==>|on chain, directly| MW[Your own wallet]
     B -.->|4. observes the chain,<br/>signed webhook on confirm| M
+    linkStyle 3 stroke:#16a34a,stroke-width:3px
 ```
 
-The green path, the money, never touches BoreLine. BoreLine only reads the public chain and derives addresses from a public key.
+The money path in green, from your customer straight to your wallet, never touches BoreLine. BoreLine only reads the public chain and derives addresses from a public key.
 
 ## Screenshots
 
