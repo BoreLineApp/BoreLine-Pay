@@ -6,16 +6,16 @@ No. BoreLine derives receiving addresses from your ZPUB, a view-only public key.
 
 ### What is a ZPUB, and is it safe to give you?
 
-A ZPUB (or XPUB) is a view-only extended public key from your hardware wallet. It lets BoreLine generate unique receiving addresses without any ability to spend. Registering it is not handing over custody. Your private keys and seed phrase never leave your device and are never seen by BoreLine.
+A ZPUB is a view-only extended public key from your hardware wallet. It lets BoreLine generate unique receiving addresses without any ability to spend. Registering it is not handing over custody. Your private keys and seed phrase never leave your device and are never seen by BoreLine.
 
 ### Where do I find my ZPUB?
 
 - **Trezor Suite:** open the account, then Show public key.
 - **Ledger Live:** open the account, then Edit, then Advanced.
 - **Sparrow:** the Master Public Keys section.
-- **Other wallets:** look for Export, Master public key, or xpub in the wallet settings.
+- **Other wallets:** look for Export or Master public key in the wallet settings, on the Native SegWit account.
 
-Native SegWit accounts give a key starting with `zpub`. Keys starting with `xpub` or `ypub` also work.
+BoreLine is native SegWit (BIP84), so it needs the key that starts with `zpub`. An `xpub` (legacy, BIP44) or `ypub` (wrapped SegWit, BIP49) belongs to a different address type and will not match, so export the Native SegWit account's `zpub`.
 
 ### How is BoreLine priced?
 

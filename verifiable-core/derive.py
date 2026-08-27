@@ -40,6 +40,21 @@ _Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
 
 _B58 = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
+# ── extended-key version bytes (mainnet) ────────────────────────────────
+# BoreLine derives BIP84 native SegWit only, so it accepts a zpub and nothing
+# else. The other versions are listed purely so we can name what a merchant
+# pasted and point them at the right key, instead of silently printing bech32
+# addresses that will never match a BIP44/BIP49 wallet.
+_VER_BIP84 = 0x04B24746  # zpub , BIP84 P2WPKH   (bc1q...)
+_VER_BIP49 = 0x049D7CB2  # ypub , BIP49 P2SH-segwit (3...)
+_VER_BIP44 = 0x0488B21E  # xpub , BIP44 legacy   (1...)
+
+_VER_NAMES = {
+    _VER_BIP84: "zpub (BIP84, native SegWit)",
+    _VER_BIP49: "ypub (BIP49, wrapped SegWit)",
+    _VER_BIP44: "xpub (BIP44, legacy)",
+}
+
 
 # ── hashing helpers ─────────────────────────────────────────────────────
 def _sha256d(d):
@@ -111,6 +126,10 @@ def _child_pub(pk, cc, idx):
     x = int.from_bytes(pk[1:], "big")
     y_sq = (pow(x, 3, _P) + 7) % _P
     y = pow(y_sq, (_P + 1) // 4, _P)
+    # Modular sqrt only returns a valid root if one exists; confirm the point
+    # is actually on secp256k1 before trusting it (rejects a malformed pubkey).
+    if (y * y) % _P != y_sq:
+        raise ValueError("Invalid parent key , point is not on the curve")
     if (y % 2) != (pk[0] - 2):
         y = _P - y
     child = _padd(_pmul(IL, G), (x, y))
@@ -181,17 +200,40 @@ def fingerprint(zpub):
     return hashlib.sha256(zpub.encode()).hexdigest()
 
 
+def key_version(zpub):
+    """Return the 4-byte version prefix of an extended key as an int, or -1."""
+    try:
+        raw = _b58dec(zpub)
+        if len(raw) < 4:
+            return -1
+        return int.from_bytes(raw[:4], "big")
+    except (ValueError, IndexError):
+        return -1
+
+
 def derive_address(zpub, index):
     """Derive the native SegWit (bc1q) address at path m/0/{index} from a ZPUB.
 
     The ZPUB is the account-level key (m/84'/0'/0'). We derive the external
     chain (/0) then the address index (/index), per BIP84. Verified against the
     official BIP84 test vectors (see README).
+
+    BIP84 (zpub) only. An xpub (BIP44) or ypub (BIP49) encodes a different
+    script type, so deriving bech32 from it would print addresses that never
+    match the wallet. Those are rejected here rather than silently mis-derived.
     """
     raw = _b58dec(zpub)
     payload, chk = raw[:-4], raw[-4:]
     if _sha256d(payload)[:4] != chk:
         raise ValueError("ZPUB checksum invalid , key may be corrupted or truncated")
+    ver = int.from_bytes(payload[:4], "big")
+    if ver != _VER_BIP84:
+        got = _VER_NAMES.get(ver, "an unrecognized key type")
+        raise ValueError(
+            "This is %s. BoreLine derives BIP84 native SegWit only, so it needs "
+            "a zpub. Export the zpub (account m/84'/0'/0') from your wallet and "
+            "use that." % got
+        )
     cc = payload[13:45]
     pk = payload[45:78]
     pk, cc = _child_pub(pk, cc, 0)       # external chain m/0
@@ -220,10 +262,19 @@ def _main(argv):
         return 1
 
     zpub = extract_zpub(argv[0])
-    if not (zpub.startswith("zpub") or zpub.startswith("xpub")):
-        print("error: expected a zpub (or xpub) extended public key", file=sys.stderr)
+    ver = key_version(zpub)
+    if ver != _VER_BIP84:
+        if ver in _VER_NAMES:
+            print("error: that looks like %s." % _VER_NAMES[ver], file=sys.stderr)
+            print("       BoreLine is BIP84 only , export your zpub (account "
+                  "m/84'/0'/0') and use that.", file=sys.stderr)
+        else:
+            print("error: expected a zpub (BIP84 native SegWit extended public "
+                  "key).", file=sys.stderr)
         return 2
 
+    print("BIP84 only , expects a zpub (native SegWit, bc1q addresses).")
+    print()
     print("ZPUB fingerprint (SHA-256):")
     print("  " + fingerprint(zpub))
     print()
