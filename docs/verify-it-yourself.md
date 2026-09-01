@@ -39,7 +39,7 @@ BoreLine stores only a SHA-256 fingerprint of your ZPUB and checks the stored ke
 
 The strongest proof is watching it work with your own coins:
 
-1. Register a **fresh ZPUB from a brand new wallet that holds zero funds** (the free trial is made for exactly this).
+1. Register a **fresh ZPUB from a brand new wallet that holds zero funds** (the free Genesis tier is made for exactly this).
 2. On the Verify page, check the derived address against that wallet and approve it.
 3. Create an invoice for a tiny amount, five dollars for example.
 4. Pay it yourself and watch where the money lands. It goes straight to your wallet, never through BoreLine.

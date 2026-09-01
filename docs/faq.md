@@ -19,7 +19,7 @@ BoreLine is native SegWit (BIP84), so it needs the key that starts with `zpub`. 
 
 ### How is BoreLine priced?
 
-A flat monthly subscription paid in Bitcoin: Starter EUR 29, Pro EUR 49, Business EUR 99 per month. No percentage is taken from any transaction. A 7-day free trial with the full Starter feature set requires no payment.
+A flat monthly subscription paid in Bitcoin: Starter EUR 20, Pro EUR 40, Business EUR 90 per month. No percentage is taken from any transaction. The Genesis tier is free for life for a single product: unlimited sales, no card, no expiry, and one free account per wallet.
 
 ### Do I need to be a developer?
 
@@ -31,7 +31,7 @@ A leaked ZPUB is a privacy concern, not a theft risk. Someone with it can see yo
 
 ### How do I know payments will really arrive at my wallet?
 
-Verify it yourself. Your dashboard's Verify page shows the derivation path, the ZPUB fingerprint, and the derived addresses. Compare them against your own wallet software. Even better, use the free trial with a fresh empty wallet: create a small invoice, pay it, and watch the money land in your wallet before you commit.
+Verify it yourself. Your dashboard's Verify page shows the derivation path, the ZPUB fingerprint, and the derived addresses. Compare them against your own wallet software. Even better, use the free Genesis tier with a fresh empty wallet: create a small invoice, pay it, and watch the money land in your wallet before you commit.
 
 ### Can I accept payments for physical goods?
 

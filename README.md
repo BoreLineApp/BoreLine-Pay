@@ -134,11 +134,12 @@ A flat monthly subscription, paid in Bitcoin, with **no percentage taken from an
 
 | Plan | Price |
 |------|-------|
-| Starter | EUR 29 / month |
-| Pro | EUR 49 / month |
-| Business | EUR 99 / month |
+| Genesis | Free for life (1 product) |
+| Starter | EUR 20 / month |
+| Pro | EUR 40 / month |
+| Business | EUR 90 / month |
 
-A **7-day free trial** with the full Starter feature set requires no payment. Verify the whole flow with a fresh empty wallet before committing a cent.
+**Genesis** is free for life for a single product: unlimited sales, no card, no expiry, one free account per wallet. Verify the whole flow with a fresh empty wallet before committing a cent.
 
 ## How BoreLine compares
 

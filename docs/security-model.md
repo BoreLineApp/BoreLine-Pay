@@ -40,4 +40,4 @@ Every webhook BoreLine sends is cryptographically signed so your server can conf
 
 ## Verify, do not trust
 
-Each account includes a verification view showing the derivation path, the ZPUB fingerprint, and the derived addresses. Compare them against your own software (Trezor Suite, Ledger Live, Sparrow, or any BIP84-compatible tool). If the addresses match, you have proven, without trusting BoreLine, that payments arrive at your account and nowhere else. The recommended way to gain confidence is the free trial: register a fresh empty wallet, create a small invoice, pay it yourself, and watch the money land in your own wallet.
+Each account includes a verification view showing the derivation path, the ZPUB fingerprint, and the derived addresses. Compare them against your own software (Trezor Suite, Ledger Live, Sparrow, or any BIP84-compatible tool). If the addresses match, you have proven, without trusting BoreLine, that payments arrive at your account and nowhere else. The recommended way to gain confidence is the free Genesis tier: register a fresh empty wallet, create a small invoice, pay it yourself, and watch the money land in your own wallet.
