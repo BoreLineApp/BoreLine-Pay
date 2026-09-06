@@ -4,6 +4,10 @@
 
 No. BoreLine derives receiving addresses from your ZPUB, a view-only public key. Payments go straight from the customer to your own hardware wallet. BoreLine has no ability to move your funds under any circumstances.
 
+### Do I need KYC or identity verification?
+
+No. BoreLine is non-custodial and never holds your funds, so there is no KYC. You register a view-only public key and sign in with a wallet signature; no name, ID document, or personal data is collected in order to receive payments.
+
 ### What is a ZPUB, and is it safe to give you?
 
 A ZPUB is a view-only extended public key from your hardware wallet. It lets BoreLine generate unique receiving addresses without any ability to spend. Registering it is not handing over custody. Your private keys and seed phrase never leave your device and are never seen by BoreLine.
@@ -19,7 +23,7 @@ BoreLine is native SegWit (BIP84), so it needs the key that starts with `zpub`. 
 
 ### How is BoreLine priced?
 
-A flat monthly subscription paid in Bitcoin: Starter EUR 20, Pro EUR 40, Business EUR 90 per month. No percentage is taken from any transaction. The Genesis tier is free for life for a single product: unlimited sales, no card, no expiry, and one free account per wallet.
+A flat monthly subscription paid in Bitcoin: Starter EUR 20, Pro EUR 40, Business EUR 90 per month. No percentage is taken from any transaction. The Genesis tier is free for life for a single product: unlimited sales, no card, no expiry, and one free account per wallet. Genesis is no-code (hosted payment links); the REST API and signed webhooks are available on the paid plans.
 
 ### Do I need to be a developer?
 

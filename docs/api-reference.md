@@ -6,6 +6,8 @@ Base URL: `https://api.borelinepay.uk`
 
 > **Always call the API from your backend.** Your API key is a secret and must never be shipped to the browser, a mobile app, or any code a visitor can inspect. A leaked key lets a stranger create invoices on your account.
 
+> **API access is on the paid plans.** The free Genesis tier is no-code (hosted payment links). Create an API key on Starter, Pro, or Business to use the endpoints and webhooks below.
+
 ---
 
 ## Create an invoice

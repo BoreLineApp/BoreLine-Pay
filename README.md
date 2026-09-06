@@ -81,6 +81,7 @@ The derived-address list lines up character for character with your own wallet, 
 - **Watch-only key.** A ZPUB can generate receiving addresses but can never spend. Your private keys and seed phrase never leave your hardware wallet, and BoreLine never sees them.
 - **Tamper detection.** BoreLine stores a SHA-256 fingerprint of your ZPUB and re-checks it before deriving any address. If it ever fails to match, the account locks and no payment can be routed to an altered key.
 - **No passwords.** You authenticate by signing a challenge with your hardware wallet. API keys are stored only as SHA-256 hashes.
+- **No KYC.** You sign in with a wallet signature, not identity documents. BoreLine collects no name, ID, or personal data in order to receive payments.
 - **Verify, do not trust.** A dashboard verification page shows the derivation path, the fingerprint, and the derived addresses so you can confirm them against your own wallet before going live.
 
 ## Verify it yourself (open source core)
@@ -101,6 +102,8 @@ Line up the output against your own wallet (Sparrow, Electrum, ...) and BoreLine
 |------|----------|-------------|
 | **No-code payment links** | Most sellers. One link per product. Safe to share publicly, it carries no secret. | No |
 | **REST API + signed webhooks** | Custom checkouts and automatic order fulfilment. | Yes, a backend |
+
+The REST API and signed webhooks are available on the paid plans. The free **Genesis** tier is no-code: it uses hosted payment links.
 
 ### Quick look at the API
 
@@ -139,7 +142,7 @@ A flat monthly subscription, paid in Bitcoin, with **no percentage taken from an
 | Pro | EUR 40 / month |
 | Business | EUR 90 / month |
 
-**Genesis** is free for life for a single product: unlimited sales, no card, no expiry, one free account per wallet. Verify the whole flow with a fresh empty wallet before committing a cent.
+**Genesis** is free for life for a single product: unlimited sales, no card, no expiry, one free account per wallet. It is no-code (hosted payment links); the REST API and signed webhooks unlock on the paid plans. Verify the whole flow with a fresh empty wallet before committing a cent.
 
 ## How BoreLine compares
 
