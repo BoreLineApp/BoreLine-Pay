@@ -118,12 +118,20 @@ def _compress(pt):
 
 def _child_pub(pk, cc, idx):
     """Non-hardened BIP32 child public key derivation from a parent pubkey."""
+    if type(idx) is not int or not 0 <= idx < 0x80000000:
+        raise ValueError("Public derivation requires a non-hardened integer index")
+    if len(pk) != 33 or pk[0] not in (2, 3):
+        raise ValueError("Invalid parent key , expected a compressed public key")
+    if len(cc) != 32:
+        raise ValueError("Invalid parent key , chain code must be 32 bytes")
     I = _hmac512(cc, pk + struct.pack(">I", idx))
     IL = int.from_bytes(I[:32], "big")
     if IL >= _N:
         raise ValueError("Invalid child key , index produced unusable key")
     G = (_Gx, _Gy)
     x = int.from_bytes(pk[1:], "big")
+    if x >= _P:
+        raise ValueError("Invalid parent key , x coordinate is outside the field")
     y_sq = (pow(x, 3, _P) + 7) % _P
     y = pow(y_sq, (_P + 1) // 4, _P)
     # Modular sqrt only returns a valid root if one exists; confirm the point
@@ -223,6 +231,8 @@ def derive_address(zpub, index):
     match the wallet. Those are rejected here rather than silently mis-derived.
     """
     raw = _b58dec(zpub)
+    if len(raw) != 82:
+        raise ValueError("ZPUB must contain a 78-byte payload and 4-byte checksum")
     payload, chk = raw[:-4], raw[-4:]
     if _sha256d(payload)[:4] != chk:
         raise ValueError("ZPUB checksum invalid , key may be corrupted or truncated")
