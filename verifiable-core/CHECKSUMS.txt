@@ -1,0 +1,21 @@
+SHA-256 checksums for the verifiable-core files.
+
+Verify your download matches (run in this folder):
+
+  # Linux / macOS
+  shasum -a 256 -c CHECKSUMS.txt
+
+  # or check one file directly, on any OS
+  python -c "import hashlib;print(hashlib.sha256(open('verify.html','rb').read()).hexdigest())"
+
+A matching checksum proves the file was not altered in transit or storage. It
+does NOT, by itself, prove the file is honest, since whoever publishes a file
+can publish a matching checksum for it. The checks that need no trust in the
+publisher are the built-in Self-test (derivation matches the external BIP84
+specification vector) and the air-gap test (run offline and it still works, so
+it sends nothing). See README.md.
+
+bb46cd8032741c90277cee1745accffbedc54fda5d5250fba83ec0c1f628940c  derive.py
+fdfb0634c5f6710b400ea4e88f1673a9cda4b90844aa22b8af67acb669fca637  verify.html
+5944a44417f1b531788ac24ae2bd0a3b9065fb42e4b18c2c065f2bf1d285f29d  verify_invoices.py
+a7db9e09bc8df51396eb56e38959e6cb767a8c820c2c82dcff57a892d4e4bda5  test_vectors.py

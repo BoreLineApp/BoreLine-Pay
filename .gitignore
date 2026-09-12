@@ -6,6 +6,12 @@
 secrets.*
 credentials.*
 
+# Local config for the standalone verifier (holds a merchant's zpub + read-only token).
+verifier_config.json
+
+# Logs (runtime logs can contain sensitive data, never commit them).
+*.log
+
 # Node
 node_modules/
 npm-debug.log*

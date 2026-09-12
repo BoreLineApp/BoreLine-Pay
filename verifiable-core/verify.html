@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BoreLine Address Verifier</title>
+<style>
+  :root{ --gold:#F0B429; --gold2:#D4AF37; --bg:#0a0a0a; --panel:#111; --panel2:#0e0e0e;
+         --line:#1e1e1e; --ink:#e2d9c8; --dim:#8A8073; --ok:#10b981; --bad:#EF4444; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+        line-height:1.55; padding:28px 16px; }
+  .wrap{ max-width:820px; margin:0 auto; }
+  h1{ font-size:19px; letter-spacing:.02em; margin:0 0 2px; color:var(--ink); }
+  .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold); margin-bottom:14px; }
+  .lede{ font-size:12.5px; color:var(--dim); margin:0 0 22px; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:18px; margin-bottom:16px; }
+  label{ display:block; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin:12px 0 5px; }
+  input,textarea{ width:100%; background:var(--panel2); border:1px solid var(--line); border-radius:3px;
+        padding:10px 11px; font:inherit; font-size:12.5px; color:var(--ink); }
+  input:focus,textarea:focus{ outline:none; border-color:rgba(240,180,41,.5); }
+  textarea{ resize:vertical; min-height:64px; word-break:break-all; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px; }
+  button{ background:var(--gold); color:#000; border:none; border-radius:3px; padding:11px 20px;
+        font:inherit; font-weight:600; font-size:12.5px; cursor:pointer; letter-spacing:.03em; }
+  button:hover{ background:#f5c14e; } button:disabled{ opacity:.5; cursor:default; }
+  .ghost{ background:transparent; color:var(--gold); border:1px solid rgba(240,180,41,.35); }
+  .chk{ display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--dim); }
+  .chk input{ width:16px; height:16px; accent-color:var(--gold); }
+  #status{ display:none; border-radius:5px; padding:16px 18px; margin-bottom:16px; font-size:14px; border:1px solid; }
+  .s-ok{ color:var(--ok); border-color:rgba(16,185,129,.35); background:rgba(16,185,129,.06); }
+  .s-bad{ color:var(--bad); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.07); }
+  .s-work{ color:var(--gold2); border-color:rgba(212,175,55,.3); background:rgba(212,175,55,.05); }
+  .s-note{ color:#F59E0B; border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.07); }
+  .counts{ font-size:12px; color:var(--dim); margin-top:6px; }
+  table{ width:100%; border-collapse:collapse; margin-top:12px; font-size:11.5px; }
+  th,td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); word-break:break-all; vertical-align:top; }
+  th{ color:var(--dim); font-weight:400; letter-spacing:.08em; text-transform:uppercase; font-size:10px; }
+  .mono{ font-variant-ligatures:none; }
+  details{ margin-top:14px; } summary{ cursor:pointer; color:var(--gold); font-size:12px; }
+  .foot{ font-size:11.5px; color:var(--dim); margin-top:22px; line-height:1.7; }
+  .foot b{ color:var(--ink); font-weight:600; }
+  a{ color:var(--gold); }
+  code{ color:var(--gold2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">// verify, do not trust</div>
+  <h1>BoreLine Address Verifier</h1>
+  <p class="lede">Independent proof that every invoice address BoreLine issued for you derives from
+    <b style="color:var(--ink)">your own key</b>. This tool re-derives each address in your browser and
+    flags any that does not match. It never sends your key anywhere, needs no private key, and cannot
+    move funds. Because the key comes from you and this file comes from the public repo, a compromised
+    server cannot pass the check by lying.</p>
+
+  <div class="panel">
+    <label for="zpub">Your account zpub (from your wallet, watch-only)</label>
+    <textarea id="zpub" spellcheck="false" placeholder="zpub..."></textarea>
+    <details style="margin-top:6px">
+      <summary style="font-size:11px;color:var(--dim);cursor:pointer">Rotated your wallet? Add previous zpub(s)</summary>
+      <textarea id="prevzpubs" spellcheck="false" placeholder="one previous zpub per line" style="margin-top:8px;min-height:48px"></textarea>
+    </details>
+
+    <label for="token">Verification token</label>
+    <input id="token" spellcheck="false" placeholder="generate this on your dashboard's Verify page">
+
+    <label for="api">API base</label>
+    <input id="api" spellcheck="false" value="https://api.borelinepay.uk">
+    <p class="foot" style="margin-top:4px">Leave this as the official host. Your token is sent here, so only change it if you self-host BoreLine.</p>
+
+    <div class="row">
+      <button id="go">Verify now</button>
+      <button class="ghost" id="selftest">Self-test</button>
+      <label class="chk"><input type="checkbox" id="remember"> Remember on this device</label>
+      <a href="#" id="forget" style="font-size:11px;color:var(--dim)">Forget saved data</a>
+    </div>
+    <p class="foot" style="margin-top:6px">Remember stores your zpub and token in this browser only. Do not use it on a shared or public computer. If a device is lost, revoke the token from your dashboard.</p>
+    <p class="foot" style="margin-top:10px">Self-test derives the published BIP84 specification vector and checks it against the known
+      addresses. If it passes, this file's derivation is honest, independently of BoreLine. To prove it sends
+      nothing, turn off your network and use offline mode: it still works, because all maths is local.</p>
+
+    <details>
+      <summary>Advanced: verify offline (paste a feed instead of fetching)</summary>
+      <p class="foot">On an air-gapped machine, fetch the feed elsewhere with
+        <code>curl -H "X-Verify-Token: TOKEN" API/api/merchant/verify-feed</code>, paste the JSON here,
+        and press Verify offline. Nothing leaves this page.</p>
+      <textarea id="feed" spellcheck="false" placeholder='{"invoices":[{"index":0,"address":"bc1q...","zpub_hash":"..."}]}'></textarea>
+      <div class="row"><button class="ghost" id="goOffline">Verify offline</button></div>
+    </details>
+  </div>
+
+  <div class="panel">
+    <div style="font-size:13px;color:#e2d9c8;font-weight:500;margin-bottom:5px">Confirm payments on chain (optional)</div>
+    <p class="foot" style="margin:0 0 12px">Go past checking addresses: reconcile what the blockchain actually shows against what BoreLine reports. Catches a "paid" we claim with no on-chain funds, or a payment you received that we did not surface. Needs your zpub and token above, plus a chain source.</p>
+    <label for="src">Chain source (Esplora API)</label>
+    <input id="src" spellcheck="false" value="https://mempool.space">
+    <p class="foot" style="margin-top:4px">Public explorers: <code>https://mempool.space</code> or <code>https://blockstream.info</code>. Your own node: the URL of your self-hosted mempool or Esplora instance, which is the private choice since the source sees which addresses you look up. For a bare Bitcoin Core or Electrum server, use the command-line script instead.</p>
+    <label for="src2">Cross-check source (optional, a second explorer)</label>
+    <input id="src2" spellcheck="false" placeholder="https://blockstream.info">
+    <p class="foot" style="margin-top:4px">If set, every address is checked against both sources and any disagreement is flagged, so one dishonest or lagging explorer is not enough to mislead you. Leave blank to skip.</p>
+    <div class="row"><button class="ghost" id="goPay">Confirm payments</button></div>
+  </div>
+
+  <div id="status"></div>
+  <div id="results"></div>
+
+  <div class="foot">
+    <b>How it works.</b> BIP84 derivation is deterministic: one zpub plus one index gives exactly one
+    address. For each invoice the server tells us only the derivation index and the address it issued.
+    This page derives <code>m/0/index</code> from your zpub and confirms they match. All maths runs
+    locally with no dependencies.<br><br>
+    <b>Why your key stays here.</b> If the checker got your key from the server, the server would control
+    both sides and could hand over a matching fake. Your key comes from you, so it cannot.<br><br>
+    <b>Get the token.</b> In your dashboard, open the Verify page and generate a verification token. It
+    is a dedicated, revocable credential that unlocks only your address feed, nothing else, so it cannot
+    read customer data, move funds, or change settings. It is separate from any phone you have paired.
+  </div>
+</div>
+
+<script>
+/* ── Validated BIP84 derivation (matches verifiable-core/test_vectors.py) ── */
+const P=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+const N=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const Gx=0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+const Gy=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+const modp=(a)=>{let r=a%P;return r<0n?r+P:r;};
+const modpow=(b,e,m)=>{b=((b%m)+m)%m;let r=1n;while(e>0n){if(e&1n)r=r*b%m;b=b*b%m;e>>=1n;}return r;};
+const inv=(a)=>modpow(((a%P)+P)%P,P-2n,P);
+function padd(A,B){if(!A)return B;if(!B)return A;const[x1,y1]=A,[x2,y2]=B;if(x1===x2&&modp(y1+y2)===0n)return null;let m;if(x1===x2&&y1===y2)m=modp(3n*x1*x1*inv(2n*y1));else m=modp(modp(y2-y1)*inv(modp(x2-x1)));const x3=modp(m*m-x1-x2);const y3=modp(m*(x1-x3)-y1);return[x3,y3];}
+function pmul(k,A){let R=null;while(k>0n){if(k&1n)R=padd(R,A);A=padd(A,A);k>>=1n;}return R;}
+const b2big=(b)=>{let x=0n;for(const v of b)x=(x<<8n)|BigInt(v);return x;};
+const big32=(x)=>{const b=new Uint8Array(32);for(let i=31;i>=0;i--){b[i]=Number(x&0xffn);x>>=8n;}return b;};
+function decompress(pk){const pre=pk[0];const x=b2big(pk.slice(1));if(x>=P)throw new Error("x>=P");const y2=modp(x*x*x+7n);let y=modpow(y2,(P+1n)/4n,P);if(modp(y*y)!==modp(y2))throw new Error("off curve");if((y&1n)!==BigInt(pre&1))y=P-y;return[x,y];}
+function compress(pt){const[x,y]=pt;const b=new Uint8Array(33);b[0]=(y&1n)===0n?2:3;b.set(big32(x),1);return b;}
+async function sha256(b){return new Uint8Array(await crypto.subtle.digest("SHA-256",b));}
+async function sha256d(b){return await sha256(await sha256(b));}
+async function sha256hex(b){const h=await sha256(b);return Array.from(h).map(x=>x.toString(16).padStart(2,"0")).join("");}
+async function hmac512(key,msg){const k=await crypto.subtle.importKey("raw",key,{name:"HMAC",hash:"SHA-512"},false,["sign"]);return new Uint8Array(await crypto.subtle.sign("HMAC",k,msg));}
+function ripemd160(data){
+ const rol=(x,n)=>((x<<n)|(x>>>(32-n)))>>>0;
+ const f=(j,x,y,z)=>j<16?(x^y^z):j<32?((x&y)|(~x&z)):j<48?((x|~y)^z):j<64?((x&z)|(y&~z)):(x^(y|~z));
+ const K=[0,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e];
+ const KH=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0];
+ const r=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+ const rh=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+ const s=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+ const sh=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+ const len=data.length,bitLen=len*8;
+ const padded=new Uint8Array((Math.floor((len+8)/64)+1)*64);
+ padded.set(data);padded[len]=0x80;
+ const dv=new DataView(padded.buffer);
+ dv.setUint32(padded.length-8,bitLen>>>0,true);dv.setUint32(padded.length-4,Math.floor(bitLen/0x100000000)>>>0,true);
+ let h0=0x67452301,h1=0xefcdab89,h2=0x98badcfe,h3=0x10325476,h4=0xc3d2e1f0;
+ const X=new Int32Array(16);
+ for(let off=0;off<padded.length;off+=64){
+  for(let i=0;i<16;i++)X[i]=dv.getInt32(off+i*4,true);
+  let al=h0,bl=h1,cl=h2,dl=h3,el=h4,ar=h0,br=h1,cr=h2,dr=h3,er=h4;
+  for(let j=0;j<80;j++){
+   const rr=(j/16)|0;
+   let t=(al+f(j,bl,cl,dl)+X[r[j]]+K[rr])|0;t=(rol(t>>>0,s[j])+el)|0;
+   al=el;el=dl;dl=rol(cl>>>0,10)|0;cl=bl;bl=t;
+   let t2=(ar+f(79-j,br,cr,dr)+X[rh[j]]+KH[rr])|0;t2=(rol(t2>>>0,sh[j])+er)|0;
+   ar=er;er=dr;dr=rol(cr>>>0,10)|0;cr=br;br=t2;
+  }
+  const t=(h1+cl+dr)|0;h1=(h2+dl+er)|0;h2=(h3+el+ar)|0;h3=(h4+al+br)|0;h4=(h0+bl+cr)|0;h0=t;
+ }
+ const out=new Uint8Array(20);const odv=new DataView(out.buffer);
+ odv.setInt32(0,h0,true);odv.setInt32(4,h1,true);odv.setInt32(8,h2,true);odv.setInt32(12,h3,true);odv.setInt32(16,h4,true);
+ return out;
+}
+async function hash160(b){return ripemd160(await sha256(b));}
+const B58="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58dec(s){let x=0n;for(const c of s){const i=B58.indexOf(c);if(i<0)throw new Error("bad base58 char");x=x*58n+BigInt(i);}const by=[];while(x>0n){by.unshift(Number(x&0xffn));x>>=8n;}for(const c of s){if(c==="1")by.unshift(0);else break;}return new Uint8Array(by);}
+const B32C="qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+function b32poly(v){const G=[0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3];let c=1;for(const x of v){const b=c>>25;c=((c&0x1ffffff)<<5)^x;for(let i=0;i<5;i++)c^=((b>>i)&1)?G[i]:0;}return c>>>0;}
+function cvbits(data,fb,tb){let acc=0,bits=0;const ret=[];const mx=(1<<tb)-1;for(const v of data){acc=((acc<<fb)|v)&((1<<(fb+tb-1))-1);bits+=fb;while(bits>=tb){bits-=tb;ret.push((acc>>bits)&mx);}}if(bits)ret.push((acc<<(tb-bits))&mx);return ret;}
+function b32enc(hrp,wv,wp){const data=[wv].concat(cvbits(Array.from(wp),8,5));const hrpe=[];for(const c of hrp)hrpe.push(c.charCodeAt(0)>>5);hrpe.push(0);for(const c of hrp)hrpe.push(c.charCodeAt(0)&31);const pm=b32poly(hrpe.concat(data).concat([0,0,0,0,0,0]))^1;const cs=[];for(let i=0;i<6;i++)cs.push((pm>>(5*(5-i)))&31);let out=hrp+"1";for(const d of data.concat(cs))out+=B32C[d];return out;}
+function ser32(i){const b=new Uint8Array(4);b[0]=(i>>>24)&255;b[1]=(i>>>16)&255;b[2]=(i>>>8)&255;b[3]=i&255;return b;}
+async function ckd(pk,cc,index){if(!(Number.isInteger(index)&&index>=0&&index<0x80000000))throw new Error("non-hardened integer index required");if(pk.length!==33||(pk[0]!==2&&pk[0]!==3))throw new Error("bad parent key");if(cc.length!==32)throw new Error("bad chain code");const data=new Uint8Array(37);data.set(pk,0);data.set(ser32(index),33);const I=await hmac512(cc,data);const IL=b2big(I.slice(0,32)),IR=I.slice(32);if(IL>=N)throw new Error("index produced unusable key");const pt=padd(pmul(IL,[Gx,Gy]),decompress(pk));if(!pt)throw new Error("point at infinity");return[compress(pt),IR];}
+const VER_BIP84=0x04b24746;
+function extractZpub(s){s=(s||"").trim().replace(/^["']|["']$/g,"").replace(/\s+/g,"");const m=s.match(/((?:zpub)[1-9A-HJ-NP-Za-km-z]{50,140})/);return m?m[1]:s;}
+async function deriveAddress(zpub,index){const raw=b58dec(zpub.trim());if(raw.length!==82)throw new Error("zpub must be a 78-byte payload plus 4-byte checksum");const payload=raw.slice(0,-4),chk=raw.slice(-4);const d=await sha256d(payload);if(!(d[0]===chk[0]&&d[1]===chk[1]&&d[2]===chk[2]&&d[3]===chk[3]))throw new Error("zpub checksum invalid");const ver=((payload[0]<<24)>>>0)|(payload[1]<<16)|(payload[2]<<8)|payload[3];if((ver>>>0)!==VER_BIP84)throw new Error("not a zpub (BIP84 native SegWit)");let cc=payload.slice(13,45),pk=payload.slice(45,78);[pk,cc]=await ckd(pk,cc,0);[pk]=await ckd(pk,cc,index);const h=await hash160(pk);const a=b32enc("bc",0,h);if(!a.startsWith("bc1q"))throw new Error("unexpected address format");return a;}
+
+/* ── UI ── */
+const $=(id)=>document.getElementById(id);
+const LS="boreline_verifier_v1";
+try{const saved=JSON.parse(localStorage.getItem(LS)||"{}");if(saved.zpub)$("zpub").value=saved.zpub;if(saved.token)$("token").value=saved.token;if(saved.api)$("api").value=saved.api;if(saved.zpub||saved.token)$("remember").checked=true;}catch(e){}
+$("forget").addEventListener("click",(e)=>{e.preventDefault();try{localStorage.removeItem(LS);}catch(_){}$("zpub").value="";$("token").value="";if($("prevzpubs"))$("prevzpubs").value="";$("remember").checked=false;setStatus("s-ok","Saved data cleared from this browser. This does not revoke your token, do that from your dashboard.");});
+
+function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";}
+function esc(x){return String(x==null?"":x).replace(/[<>&"']/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c]));}
+
+async function runVerify(invoices, currentHash){
+  const zpub=extractZpub($("zpub").value);
+  if(!zpub.toLowerCase().startsWith("zpub")){setStatus("s-bad","Enter your account zpub (it starts with <code>zpub</code>).");return;}
+  // Current key plus any previous keys the merchant rotated away from.
+  const keys=[zpub];
+  const prevRaw=($("prevzpubs")?$("prevzpubs").value:"")||"";
+  for(const line of prevRaw.split(/[\s,]+/)){ const k=extractZpub(line); if(k.toLowerCase().startsWith("zpub")) keys.push(k); }
+  const hashes=new Set();
+  try{
+    for(const k of keys){ await deriveAddress(k,0); hashes.add(await sha256hex(new TextEncoder().encode(k))); }
+  }catch(e){ setStatus("s-bad","A zpub is not valid: "+esc(e.message)); return; }
+
+  // Never trust the server's wallet tag to skip a check. Derive every invoice
+  // address from a key YOU hold; anything that matches none is surfaced, either
+  // as a hard mismatch (tagged as your current wallet) or as unverified (tagged
+  // as a wallet you did not provide), so a substitution can never be hidden.
+  let checked=0; const bad=[]; const unv=[];
+  for(const inv of invoices){
+    let matched=false, derr=null;
+    for(const k of keys){
+      try{ if(await deriveAddress(k,Number(inv.index))===inv.address){ matched=true; break; } }
+      catch(e){ derr=e; }
+    }
+    if(matched){ checked++; continue; }
+    const ih=inv.zpub_hash||"";
+    if(ih && !hashes.has(ih)) unv.push({id:inv.id,index:inv.index,address:inv.address});
+    else bad.push({id:inv.id,index:inv.index,address:inv.address,why: derr?("could not derive: "+derr.message):"does not derive from your key"});
+  }
+
+  const unvTable=()=>{
+    let t='<table><tr><th>Invoice</th><th>Path</th><th>Address the server gave</th></tr>';
+    for(const u of unv) t+='<tr><td class="mono">'+esc(u.id||"?")+'</td><td class="mono">m/0/'+esc(u.index)+'</td><td class="mono">'+esc(u.address)+'</td></tr>';
+    return t+'</table>';
+  };
+  if(bad.length){
+    let t='<table><tr><th>Invoice</th><th>Path</th><th>Address the server gave</th><th>Problem</th></tr>';
+    for(const b of bad) t+='<tr><td class="mono">'+esc(b.id||"?")+'</td><td class="mono">m/0/'+esc(b.index)+'</td><td class="mono">'+esc(b.address)+'</td><td>'+esc(b.why)+'</td></tr>';
+    t+='</table>';
+    setStatus("s-bad","<b>ALARM: "+bad.length+" address(es) do NOT derive from your key.</b>"
+      +'<div class="counts">'+checked+' verified'+(unv.length?', '+unv.length+' unverified':'')+'. Do not trust the flagged invoices. Stop sharing new links and contact support.</div>');
+    $("results").innerHTML='<div class="panel">'+t+'</div>'+(unv.length?'<div class="panel">'+unvTable()+'</div>':'');
+  } else if(unv.length){
+    setStatus("s-note","<b>"+unv.length+" invoice(s) could not be verified against your key</b>, tagged as another wallet."
+      +'<div class="counts">'+checked+' verified. If you rotated your wallet, add the previous zpub(s) above to clear these. If you did NOT rotate, treat them as suspicious: a server cannot hide a substituted address, only mislabel it, and this is that label.</div>');
+    $("results").innerHTML='<div class="panel">'+unvTable()+'</div>';
+  } else {
+    setStatus("s-ok","<b>All clear.</b> Every address the server issued derives from your key."
+      +'<div class="counts">'+checked+' verified.</div>');
+    $("results").innerHTML="";
+  }
+}
+
+$("go").addEventListener("click",async()=>{
+  const api=$("api").value.trim().replace(/\/+$/,"");const token=$("token").value.trim();
+  if(!token){setStatus("s-bad","Enter your verification token.");return;}
+  if(!/^https:\/\//i.test(api)){setStatus("s-bad","The API base must start with <code>https://</code>. Never send your token over an insecure or unfamiliar address.");return;}
+  if($("remember").checked){try{localStorage.setItem(LS,JSON.stringify({zpub:$("zpub").value.trim(),token,api}));}catch(e){}}
+  else{try{localStorage.removeItem(LS);}catch(e){}}
+  setStatus("s-work","Fetching your invoice list and re-deriving every address...");
+  $("results").innerHTML="";
+  let feed;
+  try{
+    const r=await fetch(api+"/api/merchant/verify-feed",{headers:{"X-Verify-Token":token}});
+    if(r.status===401){setStatus("s-bad","The verification token was rejected. Generate a fresh one on your dashboard's Verify page and paste it here.");return;}
+    if(!r.ok){setStatus("s-bad","Server returned "+r.status+".");return;}
+    feed=await r.json();
+  }catch(e){ setStatus("s-bad","Could not reach the API: "+esc(e.message)+". Check the API base, or use offline mode."); return; }
+  await runVerify(feed.invoices||[], feed.current_zpub_hash||"");
+});
+
+$("goOffline").addEventListener("click",async()=>{
+  let feed;
+  try{ feed=JSON.parse($("feed").value); }
+  catch(e){ setStatus("s-bad","That is not valid JSON."); return; }
+  setStatus("s-work","Re-deriving every address from the pasted feed...");
+  $("results").innerHTML="";
+  await runVerify(feed.invoices||[], feed.current_zpub_hash||"");
+});
+
+/* ── Payment reconciliation: what the chain shows vs what the server reports ── */
+async function fetchFeed(api, token){
+  const r=await fetch(api+"/api/merchant/verify-feed",{headers:{"X-Verify-Token":token}});
+  if(r.status===401) throw new Error("token-rejected");
+  if(!r.ok) throw new Error("server HTTP "+r.status);
+  return await r.json();
+}
+async function esploraReceived(base, address){
+  const r=await fetch(base.replace(/\/+$/,"")+"/api/address/"+encodeURIComponent(address));
+  if(!r.ok) throw new Error("explorer HTTP "+r.status);
+  const d=await r.json();
+  return {confirmed:(d.chain_stats&&d.chain_stats.funded_txo_sum)||0,
+          mempool:(d.mempool_stats&&d.mempool_stats.funded_txo_sum)||0};
+}
+$("goPay").addEventListener("click", async ()=>{
+  const api=$("api").value.trim().replace(/\/+$/,""), token=$("token").value.trim(), src=$("src").value.trim().replace(/\/+$/,"");
+  const src2=($("src2")?$("src2").value.trim().replace(/\/+$/,""):"");
+  if(!token){ setStatus("s-bad","Enter your verification token above."); return; }
+  if(!/^https:\/\//i.test(api)){ setStatus("s-bad","The API base must start with <code>https://</code>."); return; }
+  if(!/^https?:\/\//i.test(src)){ setStatus("s-bad","Enter a chain source URL (an Esplora API base)."); return; }
+  if(src2 && !/^https?:\/\//i.test(src2)){ setStatus("s-bad","The cross-check source must be a URL, or leave it blank."); return; }
+  setStatus("s-work","Fetching your invoices and reconciling against the chain...");
+  $("results").innerHTML="";
+  let feed;
+  try{ feed=await fetchFeed(api, token); }
+  catch(e){ setStatus("s-bad", e.message==="token-rejected" ? "The verification token was rejected. Generate a fresh one on your dashboard's Verify page." : "Could not reach the API: "+esc(e.message)); return; }
+  const relevant=(feed.invoices||[]).filter(i=>["paid","paid_late","pending"].includes(i.status)).slice(0,200);
+  if(!relevant.length){ setStatus("s-ok","No paid or pending invoices to reconcile."); return; }
+  const rows=[]; let danger=0, note=0, ok=0;
+  for(let k=0;k<relevant.length;k++){
+    const inv=relevant[k];
+    setStatus("s-work","Reconciling "+(k+1)+" of "+relevant.length+" against the chain...");
+    let rec;
+    try{ rec=await esploraReceived(src, inv.address); }
+    catch(e){ rows.push({inv, verdict:"chain source error: "+e.message, sev:"danger"}); danger++; continue; }
+    if(src2 && src2!==src){
+      let rec2=null;
+      try{ rec2=await esploraReceived(src2, inv.address); }catch(e){ rows.push({inv, verdict:"cross-check source error: "+e.message, sev:"note", rec}); note++; }
+      if(rec2 && rec2.confirmed!==rec.confirmed){
+        rows.push({inv, verdict:"explorers disagree: "+src+"="+rec.confirmed+", "+src2+"="+rec2.confirmed+" sats. Re-check, or use your own node.", sev:"note", rec});
+        note++; await new Promise(r=>setTimeout(r,120)); continue;
+      }
+    }
+    const expected=Number(inv.amount_sats||0);
+    const serverPaid=["paid","paid_late"].includes(inv.status);
+    const chainPaid=expected>0 && rec.confirmed>=expected;
+    const chainSeen=expected>0 && (rec.confirmed+rec.mempool)>=expected;
+    let verdict, sev="ok";
+    if(serverPaid && chainPaid){ verdict="paid on chain, matches"; ok++; }
+    else if(serverPaid && !chainPaid){ verdict="server says PAID but chain shows only "+rec.confirmed+" of "+expected+" sats confirmed"; sev="danger"; danger++; }
+    else if(!serverPaid && chainPaid){ verdict="PAID on chain, server still shows "+inv.status; sev="note"; note++; }
+    else if(!serverPaid && chainSeen){ verdict="unconfirmed payment seen, awaiting confirmation"; sev="note"; note++; }
+    else { verdict="awaiting payment"; ok++; }
+    rows.push({inv, verdict, sev, rec, expected});
+    await new Promise(r=>setTimeout(r,120));
+  }
+  let t='<table><tr><th>Invoice</th><th>Address</th><th>Expected</th><th>Confirmed</th><th>Server</th><th>Chain verdict</th></tr>';
+  for(const r of rows){
+    const col=r.sev==="danger"?"#EF4444":r.sev==="note"?"#F59E0B":"#8A8073";
+    t+='<tr><td class="mono">'+esc((r.inv.id||"").slice(0,16))+'</td><td class="mono">'+esc((r.inv.address||"").slice(0,18))+'…</td><td class="mono">'+esc(r.expected)+'</td><td class="mono">'+esc(r.rec?r.rec.confirmed:"?")+'</td><td>'+esc(r.inv.status||"")+'</td><td style="color:'+col+'">'+esc(r.verdict)+'</td></tr>';
+  }
+  t+='</table>';
+  if(danger){
+    setStatus("s-bad","<b>"+danger+" discrepancy(ies) need attention.</b><div class=\"counts\">"+ok+" reconciled, "+note+" informational. A row that says the server claims PAID while the chain shows less means do not fulfil that order until the funds actually arrive in your own wallet.</div>");
+  } else if(note){
+    setStatus("s-ok","<b>No dangerous discrepancies.</b><div class=\"counts\">"+ok+" reconciled, "+note+" informational (for example a payment the chain shows that the server has not marked paid yet).</div>");
+  } else {
+    setStatus("s-ok","<b>Chain matches the server.</b><div class=\"counts\">"+ok+" invoice(s) reconciled against "+esc(src)+".</div>");
+  }
+  $("results").innerHTML='<div class="panel">'+t+'</div>';
+});
+
+/* Self-test: derive the published BIP84 specification vector (the "abandon
+   abandon ... about" test mnemonic's account zpub) and check it against the
+   known addresses and fingerprint. This anchor is external to BoreLine, so a
+   pass proves this file's derivation is honest no matter who shipped it. It
+   makes no network call. */
+const SELFTEST_ZPUB="zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+const SELFTEST_ADDR={0:"bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",1:"bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g",2:"bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z",500:"bc1q22k8v7newys6zac0fk03le44lw03vzesn7qy3j",100000:"bc1qu94sv7v7jkukermctedgj75medrulu2q02x2vt"};
+const SELFTEST_FP="e06675e6ba2f9dddf8e87123bb2d426b1b2b663382d500e47e4f1126996fd074";
+$("selftest").addEventListener("click",async()=>{
+  setStatus("s-work","Deriving the published BIP84 test vector locally...");
+  $("results").innerHTML="";
+  try{
+    const rows=[];let ok=true;
+    for(const i of [0,1,2,500,100000]){
+      const got=await deriveAddress(SELFTEST_ZPUB,Number(i));
+      const good=got===SELFTEST_ADDR[i]; ok=ok&&good;
+      rows.push('<tr><td class="mono">m/0/'+i+'</td><td class="mono">'+esc(got)+'</td><td>'+(good?'match':'MISMATCH')+'</td></tr>');
+    }
+    const fp=await sha256hex(new TextEncoder().encode(SELFTEST_ZPUB));
+    const fpok=fp===SELFTEST_FP; ok=ok&&fpok;
+    rows.push('<tr><td class="mono">fingerprint</td><td class="mono">'+esc(fp)+'</td><td>'+(fpok?'match':'MISMATCH')+'</td></tr>');
+    if(ok) setStatus("s-ok","<b>Self-test passed.</b> This file derives the published BIP84 vector exactly, so its derivation is honest. Run it with your network off to confirm it sends nothing.");
+    else   setStatus("s-bad","<b>Self-test FAILED.</b> This file does not derive the known BIP84 vector. Do not trust it. Re-download from the official repo.");
+    $("results").innerHTML='<div class="panel"><table><tr><th>Path</th><th>Derived</th><th>Vs known vector</th></tr>'+rows.join("")+'</table></div>';
+  }catch(e){ setStatus("s-bad","Self-test error: "+esc(e.message)); }
+});
+</script>
+</body>
+</html>
