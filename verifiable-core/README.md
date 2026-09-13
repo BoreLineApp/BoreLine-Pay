@@ -9,6 +9,7 @@ This is the part of BoreLine you do not have to take on faith.
 
 ## What this code is, and is not
 
+- **It is optional.** You never need to run any of this to accept payments, and skipping it changes nothing about how you get paid. It exists so you can check us instead of trusting us, whenever you want. We publish it because we are paranoid about security ourselves.
 - **It is** pure BIP32 / BIP84 / bech32 math, Python 3 standard library only, no `pip install`, no network calls.
 - **It operates on a public key** (a watch-only ZPUB) that you provide. A ZPUB can generate addresses but can **never** spend.
 - **It contains no secrets**: no private keys, no seed, no API keys, no database, no server configuration. There is nothing here that could give anyone access to anything.

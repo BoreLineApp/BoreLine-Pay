@@ -96,6 +96,8 @@ python test_vectors.py             # verify the code against the BIP84 spec
 
 Line up the output against your own wallet (Sparrow, Electrum, ...) and BoreLine's Verify page. If all three match, non-custody is proven, not promised. The module contains no secrets, no keys, and makes no network calls. See [`verifiable-core/README.md`](verifiable-core/README.md).
 
+Running the verifier is **optional**: you never need it to accept payments, and skipping it changes nothing about how you get paid. It exists so the most security-conscious merchants can check us instead of trusting us, and we publish it because we are paranoid about security ourselves.
+
 ## Two ways to integrate
 
 | Path | For whom | Needs code? |
