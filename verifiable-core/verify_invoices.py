@@ -354,9 +354,16 @@ def _getch():
     """Read one keypress without waiting for Enter, cross-platform. Falls back to
     a line read if there is no real terminal (a pipe or redirect), so it never
     blocks waiting on a console that is not there."""
+    def _line_or_quit():
+        # Empty string from readline means EOF (a closed pipe / no input): quit
+        # rather than loop forever redrawing the menu.
+        line = sys.stdin.readline()
+        if line == "":
+            return "q"
+        return (line.strip() or " ")[:1]
     try:
         if not sys.stdin.isatty():
-            return (sys.stdin.readline().strip() or " ")[:1]
+            return _line_or_quit()
     except Exception:
         pass
     try:
@@ -375,7 +382,7 @@ def _getch():
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
         return ch
     except Exception:
-        return (sys.stdin.readline().strip() or " ")[:1]
+        return _line_or_quit()
 
 def _pause():
     print("\n  Press any key to return to the menu...")
