@@ -11,7 +11,7 @@
 - Integration guide: https://boreline.app/integrate
 - Security guide: https://boreline.app/security
 
-> This repository is public documentation and example code. It contains **no** server code, credentials, or anything that could compromise a merchant account. It exists to explain how BoreLine works and to help developers integrate.
+> This repository is public and safe to read: it contains **no** server code, credentials, or anything that could compromise a merchant account. It holds two things. **Documentation and integration examples** explain how BoreLine works and help you integrate. And [**`verifiable-core/`**](verifiable-core/) is not a demo, it is the real verification toolkit, the exact address derivation BoreLine runs, that a merchant uses to check for themselves, at any time and around the clock, that every address BoreLine issues belongs to their own wallet. Verify us, do not trust us.
 
 ---
 
@@ -95,6 +95,8 @@ python test_vectors.py             # verify the code against the BIP84 spec
 ```
 
 Line up the output against your own wallet (Sparrow, Electrum, ...) and BoreLine's Verify page. If all three match, non-custody is proven, not promised. The module contains no secrets, no keys, and makes no network calls. See [`verifiable-core/README.md`](verifiable-core/README.md).
+
+This is not just a one-off check. The same toolkit also fetches your live invoice list and re-derives **every** address BoreLine has issued you, and it can run **continuously**: `verify.html` re-checks on a timer while the tab is open, and `verify_invoices.py --watch` runs it unattended as a scheduled job, so you can watch BoreLine around the clock and be alerted the moment an address does not derive from your key.
 
 Running the verifier is **optional**: you never need it to accept payments, and skipping it changes nothing about how you get paid. It exists so the most security-conscious merchants can check us instead of trusting us, and we publish it because we are paranoid about security ourselves.
 
