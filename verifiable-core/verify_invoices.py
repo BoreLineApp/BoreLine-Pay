@@ -184,7 +184,29 @@ def _chain_received(cfg, address):
 
 def reconcile(cfg, feed):
     """Compare what the chain shows against what the server reports for every
-    paid or pending invoice. Returns (ok, notes, dangers, findings[])."""
+    paid or pending invoice. Returns (ok, notes, dangers, findings[]).
+
+    Ownership first: every address is re-derived from YOUR key before it is
+    reconciled. Checking a server-supplied address against the chain proves
+    nothing on its own, a substituted address the server controls would show as
+    'paid' too. So an address that does not derive from a key you provided is
+    flagged, never quietly reconciled."""
+    keys = _prep_keys(cfg)  # validates your zpub(s); raises if none is valid
+    key_hashes = {hashlib.sha256(k.encode()).hexdigest() for k in keys}
+
+    def _mine(inv):
+        try:
+            idx = int(inv.get("index"))
+        except (TypeError, ValueError):
+            return False
+        for k in keys:
+            try:
+                if derive.derive_address(k, idx) == inv.get("address"):
+                    return True
+            except Exception:
+                pass
+        return False
+
     relevant = [i for i in feed.get("invoices", [])
                 if i.get("status") in ("paid", "paid_late", "pending")]
     ok = notes = dangers = 0
@@ -195,6 +217,24 @@ def reconcile(cfg, feed):
             conf, unconf = _chain_received(cfg, addr)
         except Exception as e:
             findings.append(("danger", inv, f"chain source error: {e}")); dangers += 1; continue
+        # OWNERSHIP: does this address derive from a key you gave us? If not,
+        # reconciling it is meaningless, a payment there does not reach you.
+        if not _mine(inv):
+            got = conf + unconf
+            ih = inv.get("zpub_hash") or ""
+            if ih and ih not in key_hashes:
+                findings.append(("note", inv,
+                    "not verified: derives from a wallet you did not provide"
+                    + (f", received {got} sats" if got else "")
+                    + ". If you rotated, add the previous zpub with --prev-zpub."))
+                notes += 1
+            else:
+                findings.append(("danger", inv,
+                    "NOT YOUR ADDRESS: does not derive from your key"
+                    + (f", yet it received {got} sats" if got else "")
+                    + ". A payment here does not reach you."))
+                dangers += 1
+            continue
         # Cross-check against a second, independent explorer if configured, so one
         # dishonest or lagging source cannot mislead you on its own.
         xurl = cfg.get("xcheck_url")

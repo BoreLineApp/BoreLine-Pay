@@ -406,6 +406,24 @@ async function esploraReceived(base, address){
   return {confirmed:(d.chain_stats&&d.chain_stats.funded_txo_sum)||0,
           mempool:(d.mempool_stats&&d.mempool_stats.funded_txo_sum)||0};
 }
+// Does this invoice's address derive from any key the merchant provided?
+async function addrIsMine(keys, inv){
+  for(const k of keys){
+    try{ if(await deriveAddress(k, Number(inv.index))===inv.address) return true; }catch(e){}
+  }
+  return false;
+}
+// Build the merchant's key list + fingerprint set from the zpub fields, or null.
+async function buildKeys(){
+  const zpub=extractZpub($("zpub").value);
+  if(!zpub.toLowerCase().startsWith("zpub")) return null;
+  const keys=[zpub];
+  const prevRaw=($("prevzpubs")?$("prevzpubs").value:"")||"";
+  for(const line of prevRaw.split(/[\s,]+/)){ const kk=extractZpub(line); if(kk.toLowerCase().startsWith("zpub")) keys.push(kk); }
+  const hashes=new Set();
+  for(const k of keys){ await deriveAddress(k,0); hashes.add(await sha256hex(new TextEncoder().encode(k))); }
+  return {keys, hashes};
+}
 $("goPay").addEventListener("click", async ()=>{
   const api=$("api").value.trim().replace(/\/+$/,""), token=$("token").value.trim(), src=$("src").value.trim().replace(/\/+$/,"");
   const src2=($("src2")?$("src2").value.trim().replace(/\/+$/,""):"");
@@ -413,6 +431,13 @@ $("goPay").addEventListener("click", async ()=>{
   if(!/^https:\/\//i.test(api)){ setStatus("s-bad","The API base must start with <code>https://</code>."); return; }
   if(!/^https?:\/\//i.test(src)){ setStatus("s-bad","Enter a chain source URL (an Esplora API base)."); return; }
   if(src2 && !/^https?:\/\//i.test(src2)){ setStatus("s-bad","The cross-check source must be a URL, or leave it blank."); return; }
+  // Reconciliation must first confirm each address is YOURS. Without your key it
+  // would just check the server's addresses on chain and prove nothing, so the
+  // zpub is required here too.
+  let K;
+  try{ K=await buildKeys(); }
+  catch(e){ setStatus("s-bad","A zpub is not valid: "+esc(e.message)); return; }
+  if(!K){ setStatus("s-bad","Enter your account zpub above. Reconciliation checks each address against your own key first, so it does not simply trust the addresses the server sends."); return; }
   setStatus("s-work","Fetching your invoices and reconciling against the chain...");
   $("results").innerHTML="";
   let feed;
@@ -427,6 +452,24 @@ $("goPay").addEventListener("click", async ()=>{
     let rec;
     try{ rec=await esploraReceived(src, inv.address); }
     catch(e){ rows.push({inv, verdict:"chain source error: "+e.message, sev:"danger"}); danger++; continue; }
+    // OWNERSHIP FIRST: does this address actually derive from your key? If not,
+    // reconciling it against the chain proves nothing, a payment to it does not
+    // reach you. This is what catches a substituted address (or a wrong zpub).
+    const mine = await addrIsMine(K.keys, inv);
+    if(!mine){
+      const got = rec ? (rec.confirmed + rec.mempool) : 0;
+      const ih = inv.zpub_hash || "";
+      const exp = Number(inv.amount_sats||0);
+      if(ih && !K.hashes.has(ih)){
+        rows.push({inv, verdict:"not verified: derives from a wallet you did not provide"+(got>0?(", received "+got+" sats"):"")+". If you rotated, add the previous zpub above.", sev:"note", rec, expected:exp});
+        note++;
+      } else {
+        rows.push({inv, verdict:"NOT YOUR ADDRESS. It does not derive from your key"+(got>0?(", yet it has received "+got+" sats"):"")+". A payment here does not reach you.", sev:"danger", rec, expected:exp});
+        danger++;
+      }
+      await new Promise(r=>setTimeout(r,120));
+      continue;
+    }
     if(src2 && src2!==src){
       let rec2=null;
       try{ rec2=await esploraReceived(src2, inv.address); }catch(e){ rows.push({inv, verdict:"cross-check source error: "+e.message, sev:"note", rec}); note++; }
@@ -455,7 +498,7 @@ $("goPay").addEventListener("click", async ()=>{
   }
   t+='</table>';
   if(danger){
-    setStatus("s-bad","<b>"+danger+" discrepancy(ies) need attention.</b><div class=\"counts\">"+ok+" reconciled, "+note+" informational. A row that says the server claims PAID while the chain shows less means do not fulfil that order until the funds actually arrive in your own wallet.</div>");
+    setStatus("s-bad","<b>"+danger+" discrepancy(ies) need attention.</b><div class=\"counts\">"+ok+" reconciled, "+note+" informational. A row marked NOT YOUR ADDRESS means the server issued an address that does not derive from your key, do not trust it. A row where the server claims PAID while the chain shows less means do not fulfil that order until the funds arrive in your own wallet.</div>");
   } else if(note){
     setStatus("s-ok","<b>No dangerous discrepancies.</b><div class=\"counts\">"+ok+" reconciled, "+note+" informational (for example a payment the chain shows that the server has not marked paid yet).</div>");
   } else {
