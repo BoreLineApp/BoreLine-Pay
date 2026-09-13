@@ -47,6 +47,15 @@ The strongest proof is watching it work with your own coins:
 
 Only once you have seen it work with your own eyes and your own coins do you register the wallet for your real business.
 
+## 5. Keep verifying every invoice, automatically
+
+The steps above prove non-custody before you start. To keep proving it afterwards, the same [`verifiable-core/`](../verifiable-core/) folder ships two tools (shown as **Core Verifier** in your dashboard) that check **every** invoice for you, continuously. Using a read-only token they fetch the addresses BoreLine actually issued and compare each against the one you derive locally from your own key, so you watch the server live without revealing any secret.
+
+- `verify.html` runs in your browser, nothing to install, and can re-check on a timer.
+- `verify_invoices.py` runs on your computer with a click-to-start menu (no commands to type), can start itself on reboot in a visible window, and can message your phone over your own Telegram bot the moment an address stops matching your key.
+
+Running it is optional, you never need it to accept payments; it is simply how you check us instead of trusting us, around the clock. See [`verifiable-core/README.md`](../verifiable-core/README.md) for the full guide.
+
 ## Why this is trustworthy
 
 - The derivation is **standard BIP84**, the same math every Bitcoin wallet uses. You are not trusting BoreLine's version, you are checking it against your own.

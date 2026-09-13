@@ -1,6 +1,6 @@
 # Verifiable core
 
-This is the part of BoreLine you do not have to take on faith.
+This is the part of BoreLine you do not have to take on faith. In your dashboard it appears as the **Core Verifier**.
 
 `derive.py` is the exact logic BoreLine uses to turn your **ZPUB** into receiving addresses, extracted as a standalone, dependency-free Python module. It is the code that backs the whole "verify, do not trust" promise. Run it, read it, and confirm for yourself that:
 
