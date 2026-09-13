@@ -589,6 +589,61 @@ def _setup_wizard(cfg):
             print("  Could not send a test message. Double-check the bot token and chat id.")
     _pause()
 
+def _is_windows():
+    return os.name == "nt" or sys.platform.startswith("win")
+
+def _startup_bat_path():
+    """Path to the auto-start launcher in the current user's Windows Startup
+    folder. Files there run automatically at login, in a visible window, with no
+    admin rights needed. None if the folder cannot be located."""
+    appdata = os.environ.get("APPDATA", "")
+    if not appdata:
+        return None
+    return os.path.join(appdata, "Microsoft", "Windows", "Start Menu",
+                        "Programs", "Startup", "BoreLine-Verifier.bat")
+
+def _autostart_enabled():
+    if _is_windows():
+        p = _startup_bat_path()
+        return bool(p and os.path.exists(p))
+    return False
+
+def _enable_autostart(interval):
+    """Create the Startup launcher so the verifier opens in a visible window and
+    starts watching every time the user logs in. Returns (ok, info)."""
+    if not _is_windows():
+        return False, "non-windows"
+    p = _startup_bat_path()
+    if not p:
+        return False, "could not locate the Windows Startup folder"
+    folder = os.path.dirname(os.path.abspath(__file__))
+    script = os.path.join(folder, "verify_invoices.py")
+    content = ("@echo off\r\n"
+               "title BoreLine Verifier\r\n"
+               f'cd /d "{folder}"\r\n'
+               f'python "{script}" --watch {int(interval)}\r\n'
+               "echo.\r\n"
+               "echo The verifier has stopped. Press a key to close this window.\r\n"
+               "pause\r\n")
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        return True, p
+    except Exception as e:
+        return False, str(e)
+
+def _disable_autostart():
+    if not _is_windows():
+        return False, "non-windows"
+    p = _startup_bat_path()
+    try:
+        if p and os.path.exists(p):
+            os.remove(p)
+        return True, p
+    except Exception as e:
+        return False, str(e)
+
 def _menu():
     """Single-key interactive loop. Returns an exit code."""
     while True:
@@ -597,6 +652,7 @@ def _menu():
                           and cfg.get("verify_token"))
         report_on = bool(cfg.get("report"))
         tg_on = bool(cfg.get("telegram_bot_token") and cfg.get("telegram_chat_id"))
+        auto_on = _autostart_enabled()
         print("\n" + "=" * 54)
         print("   BORELINE ADDRESS VERIFIER")
         print("=" * 54)
@@ -609,6 +665,8 @@ def _menu():
         print("   [4] Set up or edit my keys")
         print("   [5] Auto report and freeze on mismatch: " + ("ON" if report_on else "off"))
         print("   [6] Phone alerts (Telegram): " + ("ON, send a test" if tg_on else "off, set up in option 4"))
+        if _is_windows():
+            print("   [7] Start automatically on reboot (opens a window): " + ("ON" if auto_on else "off"))
         print("   [q] Quit")
         print()
         sys.stdout.write("   Press a key: ")
@@ -677,6 +735,27 @@ def _menu():
             else:
                 print("\n  Phone alerts are not set up yet. Choose option 4 and enter your")
                 print("  Telegram bot token and chat id.")
+            _pause()
+        elif k == "7" and _is_windows():
+            if auto_on:
+                okd, info = _disable_autostart()
+                print("\n  Auto start on reboot is now OFF." if okd
+                      else f"\n  Could not turn it off: {info}")
+            elif not configured:
+                print("\n  Set up your keys first (option 4), then enable auto start.")
+            else:
+                raw = input("\n  After reboot, re-check every how many seconds [300]: ").strip()
+                try:
+                    secs = max(15, int(raw)) if raw else 300
+                except ValueError:
+                    secs = 300
+                oke, info = _enable_autostart(secs)
+                if oke:
+                    print("\n  Done. Next time you log in, a window opens by itself and the")
+                    print("  verifier starts watching automatically. To stop it, close that")
+                    print("  window; to turn this off, come back here and press 7.")
+                else:
+                    print(f"\n  Could not enable auto start: {info}")
             _pause()
         elif k in ("q", "\x03", "\x1b"):
             print("\n  Bye.")

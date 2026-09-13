@@ -96,7 +96,7 @@ For an air-gapped setup, fetch the feed on another machine and paste the JSON in
 - **Windows:** double-click `verify.bat`
 - **macOS / Linux:** double-click `verify.command` (on macOS the first time, right-click then Open; if it will not run, `chmod +x verify.command`)
 
-The menu is single-key, no flags to remember:
+The menu is single-key, no flags to remember, **you never type a command**:
 
 ```
 [1] Check my addresses now
@@ -104,10 +104,14 @@ The menu is single-key, no flags to remember:
 [3] Confirm payments on chain
 [4] Set up or edit my keys
 [5] Auto report and freeze on mismatch: on/off
+[6] Phone alerts (Telegram): on/off
+[7] Start automatically on reboot (opens a window): on/off   (Windows)
 [q] Quit
 ```
 
-Choose **4** once to paste your zpub, any previous zpub(s), and your verification token; it saves them to `verifier_config.json` next to the script so you only do it once. Then **1** checks now, **2** watches on a loop, **3** reconciles payments against the chain.
+Choose **4** once to paste your zpub, any previous zpub(s), your verification token, and optionally your Telegram bot details for phone alerts; it saves them to `verifier_config.json` next to the script so you only do it once. Then **1** checks now, **2** watches on a loop, **3** reconciles payments against the chain, **6** sends a test alert to your phone.
+
+**Start automatically on reboot (Windows, one tick).** After you have set up your keys, press **7** and pick a re-check interval. From then on, every time you log in, a window **opens by itself** and the verifier starts watching, so a non-technical merchant gets round-the-clock checking without touching a terminal. It uses your saved settings, so if phone alerts and auto-report are on, they keep working across reboots. Press **7** again to turn it off. (It uses your own Windows Startup folder, no admin rights, nothing hidden; on macOS or Linux, add the script to your login items or a `cron @reboot` entry.)
 
 **For automation / scheduling**, the flags still work exactly as before:
 
