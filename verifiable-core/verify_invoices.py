@@ -182,6 +182,62 @@ def _chain_received(cfg, address):
                                  bool(cfg.get("electrum_ssl", True)), _scripthash(address))
     return _esplora_balance(cfg.get("esplora_url") or "https://mempool.space", address)
 
+def _min_ts_for_inv(inv):
+    """Unix timestamp before which on-chain history is ignored (invoice creation
+    minus a 1 hour skew), matching the server. None if there is no creation time,
+    in which case reconciliation cannot exclude a reused address's prior funds."""
+    c = inv.get("created_at")
+    if not c:
+        return None
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(c)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp()) - 3600
+    except Exception:
+        return None
+
+def _esplora_received_since(base, address, min_ts, need):
+    """Sats an address received, counting only transactions at or after min_ts
+    (None = count all, cannot time-filter). Uses the tx list, not the lifetime
+    address total, so funds that predate the invoice are excluded. Returns
+    (confirmed, mempool, conf_paid, mem_paid) where *_paid means a single
+    qualifying tx sent at least `need`, matching the server's rule."""
+    url = base.rstrip("/") + "/api/address/" + address + "/txs"
+    with urllib.request.urlopen(url, timeout=20) as r:
+        txs = json.loads(r.read().decode())
+    confirmed = mempool = 0
+    conf_paid = mem_paid = False
+    for tx in (txs or []):
+        st = tx.get("status", {}) or {}
+        if st.get("confirmed") and min_ts is not None and st.get("block_time") is not None \
+                and st["block_time"] < min_ts:
+            continue
+        recv = sum(int(v.get("value", 0)) for v in (tx.get("vout") or [])
+                   if v.get("scriptpubkey_address") == address)
+        if st.get("confirmed"):
+            confirmed += recv
+            if recv >= need:
+                conf_paid = True
+        else:
+            mempool += recv
+            if recv >= need:
+                mem_paid = True
+    return confirmed, mempool, conf_paid, mem_paid
+
+def _chain_received_since(cfg, address, min_ts, need):
+    """Payment view for reconciliation. Returns
+    (confirmed, mempool, conf_paid, mem_paid, filtered). For Esplora it is time
+    filtered by min_ts. For Electrum it falls back to the current balance, which
+    cannot exclude prior history, so filtered is False and callers add a caveat."""
+    if cfg.get("source") == "electrum":
+        conf, unconf = _chain_received(cfg, address)
+        return conf, unconf, conf >= need, (conf + unconf) >= need, False
+    base = cfg.get("esplora_url") or "https://mempool.space"
+    c, m, cp, mp = _esplora_received_since(base, address, min_ts, need)
+    return c, m, cp, mp, (min_ts is not None)
+
 def reconcile(cfg, feed):
     """Compare what the chain shows against what the server reports for every
     paid or pending invoice. Returns (ok, notes, dangers, findings[]).
@@ -213,14 +269,15 @@ def reconcile(cfg, feed):
     findings = []
     for inv in relevant:
         addr = inv.get("address"); expected = int(inv.get("amount_sats") or 0)
+        min_ts = _min_ts_for_inv(inv)
         try:
-            conf, unconf = _chain_received(cfg, addr)
+            conf, mem, conf_paid, mem_paid, filtered = _chain_received_since(cfg, addr, min_ts, expected)
         except Exception as e:
             findings.append(("danger", inv, f"chain source error: {e}")); dangers += 1; continue
         # OWNERSHIP: does this address derive from a key you gave us? If not,
         # reconciling it is meaningless, a payment there does not reach you.
         if not _mine(inv):
-            got = conf + unconf
+            got = conf + mem
             ih = inv.get("zpub_hash") or ""
             if ih and ih not in key_hashes:
                 findings.append(("note", inv,
@@ -240,7 +297,7 @@ def reconcile(cfg, feed):
         xurl = cfg.get("xcheck_url")
         if xurl:
             try:
-                c2, _ = _esplora_balance(xurl, addr)
+                c2, _, _, _ = _esplora_received_since(xurl, addr, min_ts, expected)
                 if c2 != conf:
                     findings.append(("note", inv,
                         f"explorers disagree: primary={conf}, {xurl}={c2} sats; re-check or use your own node"))
@@ -249,16 +306,19 @@ def reconcile(cfg, feed):
             except Exception as e:
                 findings.append(("note", inv, f"cross-check source error: {e}")); notes += 1
         server_paid = inv.get("status") in ("paid", "paid_late")
-        chain_paid  = expected > 0 and conf >= expected
-        chain_seen  = expected > 0 and (conf + unconf) >= expected
-        if server_paid and chain_paid:
+        # Paid = a confirmed tx of at least the amount, received at or after the
+        # invoice was created (matches the server); prior history is excluded.
+        caveat = "" if filtered else (" (lifetime balance, no creation time, may "
+                                      "include funds that predate the invoice)")
+        if server_paid and conf_paid:
             ok += 1
-        elif server_paid and not chain_paid:
+        elif server_paid and not conf_paid:
             findings.append(("danger", inv,
-                f"server says PAID but chain shows {conf} of {expected} sats confirmed")); dangers += 1
-        elif not server_paid and chain_paid:
-            findings.append(("note", inv, f"PAID on chain, server still shows {inv.get('status')}")); notes += 1
-        elif not server_paid and chain_seen:
+                f"server says PAID but the chain shows no confirmed payment of "
+                f"{expected} sats since the invoice was created (found {conf})")); dangers += 1
+        elif not server_paid and conf_paid:
+            findings.append(("note", inv, f"PAID on chain, server still shows {inv.get('status')}{caveat}")); notes += 1
+        elif not server_paid and mem_paid:
             findings.append(("note", inv, "unconfirmed payment seen, awaiting confirmation")); notes += 1
         else:
             ok += 1

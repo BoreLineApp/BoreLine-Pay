@@ -399,12 +399,33 @@ async function fetchFeed(api, token){
   if(!r.ok) throw new Error("server HTTP "+r.status);
   return await r.json();
 }
-async function esploraReceived(base, address){
-  const r=await fetch(base.replace(/\/+$/,"")+"/api/address/"+encodeURIComponent(address));
+// Ignore on-chain history from before the invoice existed, exactly as the server
+// does (creation time minus a 1 hour skew). Without this, a reused address whose
+// wallet already received funds in the past looks "paid" when it is not, which
+// would falsely make an honest server look like it is hiding a payment.
+function minTsFor(inv){
+  if(!inv || !inv.created_at) return null;
+  const t=Date.parse(inv.created_at);
+  if(isNaN(t)) return null;
+  return Math.floor(t/1000) - 3600;
+}
+// Sats this address received, counting only transactions at or after minTs
+// (null = no creation time available, count all and caveat it). Uses the tx
+// list, not the lifetime address total, so prior history is excluded.
+async function esploraReceivedSince(base, address, minTs, need){
+  const r=await fetch(base.replace(/\/+$/,"")+"/api/address/"+encodeURIComponent(address)+"/txs");
   if(!r.ok) throw new Error("explorer HTTP "+r.status);
-  const d=await r.json();
-  return {confirmed:(d.chain_stats&&d.chain_stats.funded_txo_sum)||0,
-          mempool:(d.mempool_stats&&d.mempool_stats.funded_txo_sum)||0};
+  const txs=await r.json();
+  let confirmed=0, mempool=0, confPaid=false, memPaid=false;
+  for(const tx of (txs||[])){
+    const st=tx.status||{};
+    if(st.confirmed && minTs!=null && st.block_time!=null && st.block_time<minTs) continue;
+    let recv=0;
+    for(const v of (tx.vout||[])) if(v.scriptpubkey_address===address) recv+=(v.value||0);
+    if(st.confirmed){ confirmed+=recv; if(recv>=need) confPaid=true; }
+    else { mempool+=recv; if(recv>=need) memPaid=true; }
+  }
+  return {confirmed, mempool, confPaid, memPaid};
 }
 // Does this invoice's address derive from any key the merchant provided?
 async function addrIsMine(keys, inv){
@@ -449,8 +470,9 @@ $("goPay").addEventListener("click", async ()=>{
   for(let k=0;k<relevant.length;k++){
     const inv=relevant[k];
     setStatus("s-work","Reconciling "+(k+1)+" of "+relevant.length+" against the chain...");
+    const minTs=minTsFor(inv), need=Number(inv.amount_sats||0), filtered=(minTs!=null);
     let rec;
-    try{ rec=await esploraReceived(src, inv.address); }
+    try{ rec=await esploraReceivedSince(src, inv.address, minTs, need); }
     catch(e){ rows.push({inv, verdict:"chain source error: "+e.message, sev:"danger"}); danger++; continue; }
     // OWNERSHIP FIRST: does this address actually derive from your key? If not,
     // reconciling it against the chain proves nothing, a payment to it does not
@@ -472,20 +494,24 @@ $("goPay").addEventListener("click", async ()=>{
     }
     if(src2 && src2!==src){
       let rec2=null;
-      try{ rec2=await esploraReceived(src2, inv.address); }catch(e){ rows.push({inv, verdict:"cross-check source error: "+e.message, sev:"note", rec}); note++; }
+      try{ rec2=await esploraReceivedSince(src2, inv.address, minTs, need); }catch(e){ rows.push({inv, verdict:"cross-check source error: "+e.message, sev:"note", rec}); note++; }
       if(rec2 && rec2.confirmed!==rec.confirmed){
         rows.push({inv, verdict:"explorers disagree: "+src+"="+rec.confirmed+", "+src2+"="+rec2.confirmed+" sats. Re-check, or use your own node.", sev:"note", rec});
         note++; await new Promise(r=>setTimeout(r,120)); continue;
       }
     }
-    const expected=Number(inv.amount_sats||0);
+    const expected=need;
     const serverPaid=["paid","paid_late"].includes(inv.status);
-    const chainPaid=expected>0 && rec.confirmed>=expected;
-    const chainSeen=expected>0 && (rec.confirmed+rec.mempool)>=expected;
+    // Paid = a confirmed transaction of at least the amount, received at or after
+    // the invoice was created (matches the server). rec already excludes prior
+    // history when a creation time was available.
+    const chainPaid=rec.confPaid;
+    const chainSeen=rec.confPaid || rec.memPaid;
+    const caveat = filtered ? "" : " (lifetime total, no creation time from the server, so this may include funds that predate the invoice)";
     let verdict, sev="ok";
     if(serverPaid && chainPaid){ verdict="paid on chain, matches"; ok++; }
-    else if(serverPaid && !chainPaid){ verdict="server says PAID but chain shows only "+rec.confirmed+" of "+expected+" sats confirmed"; sev="danger"; danger++; }
-    else if(!serverPaid && chainPaid){ verdict="PAID on chain, server still shows "+inv.status; sev="note"; note++; }
+    else if(serverPaid && !chainPaid){ verdict="server says PAID but the chain shows no confirmed payment of "+expected+" sats since the invoice was created (found "+rec.confirmed+")"; sev="danger"; danger++; }
+    else if(!serverPaid && chainPaid){ verdict="PAID on chain, server still shows "+esc(inv.status)+caveat; sev="note"; note++; }
     else if(!serverPaid && chainSeen){ verdict="unconfirmed payment seen, awaiting confirmation"; sev="note"; note++; }
     else { verdict="awaiting payment"; ok++; }
     rows.push({inv, verdict, sev, rec, expected});
