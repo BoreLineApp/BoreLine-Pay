@@ -678,6 +678,26 @@ def _erase_all():
     _TG_ALERTED.clear()
     return removed
 
+def _watch_loop(cfg, secs):
+    """Run a check every `secs` seconds until Ctrl+C, then return to the menu."""
+    print(f"  Watching every {secs}s. Press Ctrl+C to stop and return to the menu.\n")
+    try:
+        while True:
+            try:
+                _run(cfg)
+            except Exception as e:
+                print("  [warn]", e)
+            time.sleep(secs)
+    except KeyboardInterrupt:
+        print("\n  Stopped watching.")
+
+def _ask_interval(prompt="  Re-check every how many seconds [300]: ", default=300):
+    raw = input(prompt).strip()
+    try:
+        return max(15, int(raw)) if raw else default
+    except ValueError:
+        return default
+
 def _menu():
     """Single-key interactive loop. Returns an exit code."""
     while True:
@@ -720,22 +740,16 @@ def _menu():
         elif k == "2":
             if not configured:
                 print("\n  Set up your keys first (option 4)."); _pause(); continue
-            raw = input("\n  Re-check every how many seconds [300]: ").strip()
-            try:
-                secs = max(15, int(raw)) if raw else 300
-            except ValueError:
-                secs = 300
-            print(f"  Watching every {secs}s. Press Ctrl+C to stop and return to the menu.\n")
-            c2 = dict(cfg)
-            try:
-                while True:
-                    try:
-                        _run(c2)
-                    except Exception as e:
-                        print("  [warn]", e)
-                    time.sleep(secs)
-            except KeyboardInterrupt:
-                print("\n  Stopped watching.")
+            secs = _ask_interval()
+            # Offer to also set up reboot auto-start now, so you do not have to
+            # stop the watch later just to reach option 7.
+            if _is_windows() and not auto_on:
+                ans = input("  Also start automatically after a reboot? [y/N]: ").strip().lower()
+                if ans in ("y", "yes"):
+                    oke, info = _enable_autostart(secs)
+                    print("  Auto start on reboot is ON.\n" if oke
+                          else f"  Could not enable auto start: {info}\n")
+            _watch_loop(dict(cfg), secs)
             _pause()
         elif k == "3":
             if not configured:
@@ -779,16 +793,15 @@ def _menu():
             elif not configured:
                 print("\n  Set up your keys first (option 4), then enable auto start.")
             else:
-                raw = input("\n  After reboot, re-check every how many seconds [300]: ").strip()
-                try:
-                    secs = max(15, int(raw)) if raw else 300
-                except ValueError:
-                    secs = 300
+                secs = _ask_interval("\n  After reboot, re-check every how many seconds [300]: ")
                 oke, info = _enable_autostart(secs)
                 if oke:
                     print("\n  Done. Next time you log in, a window opens by itself and the")
                     print("  verifier starts watching automatically. To stop it, close that")
                     print("  window; to turn this off, come back here and press 7.")
+                    ans = input("\n  Start watching now as well? [y/N]: ").strip().lower()
+                    if ans in ("y", "yes"):
+                        _watch_loop(dict(cfg), secs)
                 else:
                     print(f"\n  Could not enable auto start: {info}")
             _pause()

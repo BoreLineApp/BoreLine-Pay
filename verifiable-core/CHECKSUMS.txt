@@ -17,5 +17,5 @@ it sends nothing). See README.md.
 
 bb46cd8032741c90277cee1745accffbedc54fda5d5250fba83ec0c1f628940c  derive.py
 55c4d5aca00b5d5d735d095145f10438814bbeae9ce5678f238b950efcbcbad1  verify.html
-24a274b6a6977b255786b3792f64af7648ec6cdb06c62b435df29e6435df4789  verify_invoices.py
+69d5cc7c51d6460f7b94c9c1c4046e7c368b0da97c00e144317d77fcc085d07c  verify_invoices.py
 a7db9e09bc8df51396eb56e38959e6cb767a8c820c2c82dcff57a892d4e4bda5  test_vectors.py

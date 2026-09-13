@@ -116,6 +116,8 @@ Choose **4** once to paste your zpub, any previous zpub(s), your verification to
 
 **Start automatically on reboot (Windows, one tick).** After you have set up your keys, press **7** and pick a re-check interval. From then on, every time you log in, a window **opens by itself** and the verifier starts watching, so a non-technical merchant gets round-the-clock checking without touching a terminal. It uses your saved settings, so if phone alerts and auto-report are on, they keep working across reboots. Press **7** again to turn it off. (It uses your own Windows Startup folder, no admin rights, nothing hidden; on macOS or Linux, add the script to your login items or a `cron @reboot` entry.)
 
+You do not have to choose one or the other: starting a watch (option **2**) offers to turn on reboot auto-start at the same time, and turning on auto-start (option **7**) offers to start watching right away, so you never have to stop a running watch just to enable it.
+
 **For automation / scheduling**, the flags still work exactly as before:
 
 ```bash
