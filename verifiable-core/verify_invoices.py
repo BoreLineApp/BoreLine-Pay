@@ -54,6 +54,24 @@ import derive  # the sibling module in verifiable-core/
 DEFAULT_API = "https://api.borelinepay.uk"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verifier_config.json")
 
+# Some hosts (Cloudflare in front of the API, and public explorers like
+# mempool.space) reject the default Python-urllib user agent with 403 Forbidden.
+# Identify ourselves with a normal user agent so plain HTTPS requests are served.
+_UA = "Mozilla/5.0 (compatible; BoreLineVerifier/1.0; +https://boreline.app)"
+
+def _open(url, data=None, headers=None, method=None, timeout=30):
+    """urllib.request.urlopen with our user agent always set. Accepts a URL string
+    or an existing Request. Returns the response context manager."""
+    if isinstance(url, urllib.request.Request):
+        req = url
+        req.add_header("User-Agent", _UA)
+    else:
+        h = {"User-Agent": _UA}
+        if headers:
+            h.update(headers)
+        req = urllib.request.Request(url, data=data, headers=h, method=method)
+    return urllib.request.urlopen(req, timeout=timeout)
+
 
 def _load_config():
     """Merge, in order of precedence: CLI flags > env vars > verifier_config.json."""
@@ -85,8 +103,7 @@ def _write_config_template():
 
 def _fetch_feed(api_base, token):
     url = api_base.rstrip("/") + "/api/merchant/verify-feed"
-    req = urllib.request.Request(url, headers={"X-Verify-Token": token})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with _open(url, headers={"X-Verify-Token": token}, timeout=30) as r:
         return json.loads(r.read().decode())
 
 
@@ -97,10 +114,9 @@ def _post_report(api_base, token, inv_id, index, address):
     Returns the server's response dict, or raises."""
     url  = api_base.rstrip("/") + "/api/merchant/verify-report"
     body = json.dumps({"invoice_id": inv_id, "index": index, "address": address}).encode()
-    req  = urllib.request.Request(url, data=body, method="POST",
-                                  headers={"X-Verify-Token": token,
-                                           "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with _open(url, data=body, method="POST",
+               headers={"X-Verify-Token": token, "Content-Type": "application/json"},
+               timeout=30) as r:
         return json.loads(r.read().decode())
 
 
@@ -122,7 +138,7 @@ def _tg_send(cfg, text):
     data = urllib.parse.urlencode({"chat_id": chat, "text": text,
                                    "disable_web_page_preview": "true"}).encode()
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=15) as r:
+        with _open(url, data=data, timeout=15) as r:
             return getattr(r, "status", 200) == 200
     except Exception as e:
         print(f"[warn] Telegram notify failed: {e}")
@@ -174,7 +190,7 @@ def _scripthash(address):
 
 def _esplora_balance(base, address):
     url = base.rstrip("/") + "/api/address/" + address
-    with urllib.request.urlopen(url, timeout=20) as r:
+    with _open(url, timeout=20) as r:
         d = json.loads(r.read().decode())
     conf = (d.get("chain_stats") or {}).get("funded_txo_sum", 0)
     mem  = (d.get("mempool_stats") or {}).get("funded_txo_sum", 0)
@@ -242,7 +258,7 @@ def _esplora_received_since(base, address, min_ts, need):
     (confirmed, mempool, conf_paid, mem_paid) where *_paid means a single
     qualifying tx sent at least `need`, matching the server's rule."""
     url = base.rstrip("/") + "/api/address/" + address + "/txs"
-    with urllib.request.urlopen(url, timeout=20) as r:
+    with _open(url, timeout=20) as r:
         txs = json.loads(r.read().decode())
     confirmed = mempool = 0
     conf_paid = mem_paid = False
