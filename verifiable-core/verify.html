@@ -192,6 +192,29 @@ $("forget").addEventListener("click",(e)=>{e.preventDefault();try{localStorage.r
 function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";}
 function esc(x){return String(x==null?"":x).replace(/[<>&"']/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c]));}
 
+// The one flagged invoice a "Report and freeze" button will send, and the sender.
+let _flaggedForReport=null;
+async function reportMismatch(inv){
+  if(!inv){ return; }
+  const api=$("api").value.trim().replace(/\/+$/,""); const token=$("token").value.trim();
+  if(!token){ alert("Enter your verification token first, then report."); return; }
+  if(!/^https:\/\//i.test(api)){ alert("The API base must be https:// before you report."); return; }
+  if(!confirm("Report this mismatch to BoreLine and FREEZE this account?\n\nNew invoices and hosted pay pages will stop immediately, until the BoreLine team reviews it. This protects your customers from paying an address that may not be yours.")) return;
+  try{
+    const r=await fetch(api+"/api/merchant/verify-report",{method:"POST",
+      headers:{"Content-Type":"application/json","X-Verify-Token":token},
+      body:JSON.stringify({invoice_id:inv.id,index:inv.index,address:inv.address})});
+    const d=await r.json().catch(()=>({}));
+    if(r.status===401){ setStatus("s-bad","Token rejected. Generate a fresh verification token on your dashboard and try again."); return; }
+    if(!r.ok){ setStatus("s-bad","Report failed: "+esc(d.error||("HTTP "+r.status))); return; }
+    setStatus("s-bad","<b>Reported. This account is now halted.</b>"
+      +'<div class="counts">'+esc(d.message||"")+'<br>Verdict: <b>'+esc(d.kind||"")+'</b>. BoreLine has been alerted and will investigate. '
+      +'Payments are stopped on this account until the BoreLine team clears it.</div>');
+  }catch(e){ setStatus("s-bad","Could not send the report: "+esc(e.message)); }
+}
+const _reportBtnHtml='<div class="row" style="margin-top:12px"><button id="reportBtn" style="background:var(--bad);color:#fff">Report to BoreLine and freeze this account</button></div>';
+function _wireReportBtn(){ const rb=$("reportBtn"); if(rb) rb.addEventListener("click",()=>reportMismatch(_flaggedForReport)); }
+
 async function runVerify(invoices, currentHash){
   const zpub=extractZpub($("zpub").value);
   if(!zpub.toLowerCase().startsWith("zpub")){setStatus("s-bad","Enter your account zpub (it starts with <code>zpub</code>).");return;}
@@ -230,14 +253,23 @@ async function runVerify(invoices, currentHash){
     let t='<table><tr><th>Invoice</th><th>Path</th><th>Address the server gave</th><th>Problem</th></tr>';
     for(const b of bad) t+='<tr><td class="mono">'+esc(b.id||"?")+'</td><td class="mono">m/0/'+esc(b.index)+'</td><td class="mono">'+esc(b.address)+'</td><td>'+esc(b.why)+'</td></tr>';
     t+='</table>';
+    _flaggedForReport=bad[0];
     setStatus("s-bad","<b>ALARM: "+bad.length+" address(es) do NOT derive from your key.</b>"
       +'<div class="counts">'+checked+' verified'+(unv.length?', '+unv.length+' unverified':'')+'. Do not trust the flagged invoices. Stop sharing new links and contact support.</div>');
-    $("results").innerHTML='<div class="panel">'+t+'</div>'+(unv.length?'<div class="panel">'+unvTable()+'</div>':'');
+    $("results").innerHTML='<div class="panel">'+t
+      +'<p class="foot" style="margin-top:12px">Reporting freezes this account on BoreLine (no new invoices, hosted pay pages disabled) and alerts the BoreLine team, so no customer can pay a flagged address while it is investigated.</p>'
+      +_reportBtnHtml+'</div>'+(unv.length?'<div class="panel">'+unvTable()+'</div>':'');
+    _wireReportBtn();
   } else if(unv.length){
+    _flaggedForReport=unv[0];
     setStatus("s-note","<b>"+unv.length+" invoice(s) could not be verified against your key</b>, tagged as another wallet."
       +'<div class="counts">'+checked+' verified. If you rotated your wallet, add the previous zpub(s) above to clear these. If you did NOT rotate, treat them as suspicious: a server cannot hide a substituted address, only mislabel it, and this is that label.</div>');
-    $("results").innerHTML='<div class="panel">'+unvTable()+'</div>';
+    $("results").innerHTML='<div class="panel">'+unvTable()
+      +'<p class="foot" style="margin-top:12px">If you did not rotate your wallet, report it: BoreLine freezes this account and investigates. If the server can prove the address was substituted, the freeze becomes a hard alarm; otherwise it is a precautionary hold you can ask BoreLine to lift once you confirm you used the right zpub.</p>'
+      +_reportBtnHtml+'</div>';
+    _wireReportBtn();
   } else {
+    _flaggedForReport=null;
     setStatus("s-ok","<b>All clear.</b> Every address the server issued derives from your key."
       +'<div class="counts">'+checked+' verified.</div>');
     $("results").innerHTML="";

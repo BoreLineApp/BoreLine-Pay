@@ -86,6 +86,20 @@ def _fetch_feed(api_base, token):
         return json.loads(r.read().decode())
 
 
+def _post_report(api_base, token, inv_id, index, address):
+    """Report a derivation mismatch to the server, which freezes THIS account
+    (new invoices and hosted pay pages stop) and alerts the BoreLine team. The
+    server independently re-derives to mark it corroborated or unconfirmed.
+    Returns the server's response dict, or raises."""
+    url  = api_base.rstrip("/") + "/api/merchant/verify-report"
+    body = json.dumps({"invoice_id": inv_id, "index": index, "address": address}).encode()
+    req  = urllib.request.Request(url, data=body, method="POST",
+                                  headers={"X-Verify-Token": token,
+                                           "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
 # ── Chain sources for payment confirmation ─────────────────────────────────
 # Two independent ways to check whether an address ACTUALLY received its funds,
 # so the "paid" the server reports is reconciled against the chain itself:
@@ -282,6 +296,19 @@ def _run(cfg):
             print(f"    invoice {iid} (m/0/{idx}): server said {addr} ; {why}")
         print("    Do not trust these invoices. Stop sharing new links and contact support.")
         rc = 1
+        # Optional: report the first mismatch, which freezes this account on the
+        # server (no new invoices, hosted pay pages disabled) and alerts BoreLine.
+        # Meant for unattended --watch monitoring so a breach is contained even
+        # when nobody is looking.
+        if cfg.get("report"):
+            iid, idx, addr, _why = mismatches[0]
+            try:
+                d = _post_report(cfg["api_base"], cfg["verify_token"], iid, idx, addr)
+                print(f"[{stamp}] REPORTED to BoreLine: account halted "
+                      f"(verdict: {d.get('kind','?')}). Payments are stopped on this "
+                      f"account until the BoreLine team clears it.")
+            except Exception as e:
+                print(f"[{stamp}] [warn] could not send mismatch report: {e}")
     else:
         print(f"[{stamp}] OK: {checked} address(es) verified against your key.")
     if unverified:
@@ -341,6 +368,10 @@ def main():
     ap.add_argument("--xcheck", action="store_true",
                     help="cross-check payments against a second explorer (blockstream.info) and flag disagreements")
     ap.add_argument("--xcheck-url", help="a specific second Esplora API to cross-check against")
+    ap.add_argument("--report", action="store_true",
+                    help="on a mismatch, report it to BoreLine, which FREEZES this account "
+                         "(no new invoices, hosted pay pages disabled) and alerts the team. "
+                         "Use with --watch for unattended monitoring.")
     args = ap.parse_args()
 
     cfg = _load_config()
@@ -358,6 +389,7 @@ def main():
     if args.electrum_no_ssl: cfg["electrum_ssl"] = False
     if args.xcheck_url: cfg["xcheck_url"] = args.xcheck_url
     elif args.xcheck: cfg["xcheck_url"] = "https://blockstream.info"
+    if args.report: cfg["report"] = True
 
     if not cfg["zpub"] or cfg["zpub"].startswith("zpub...") or not cfg["verify_token"]:
         if not os.path.exists(CONFIG_FILE):

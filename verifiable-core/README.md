@@ -92,6 +92,17 @@ The verifier checks every invoice address against a key **you** hold, and never 
 
 If you have rotated your ZPUB, give the verifier your previous key(s) so legitimate old invoices verify cleanly: paste them in the "previous zpub(s)" box in `verify.html`, or pass `--prev-zpub` (repeatable) to the script. Anything still unverified after that, when you have not rotated, should be treated as suspicious.
 
+### Report a mismatch and freeze the account
+
+Finding a mismatch is not the end of it: you can report it back and have BoreLine **stop the account immediately**. In `verify.html` a "Report to BoreLine and freeze this account" button appears whenever an address is flagged; in the script, add `--report` (pair it with `--watch` for unattended monitoring). A report is authenticated by your verification token, so it can only ever freeze **your own** account.
+
+On a report the server re-derives the address from the key it holds and decides:
+
+- **Corroborated** — the server's own re-derivation disagrees too. Unambiguous tampering.
+- **Unconfirmed** — the server's data is self-consistent (often just a wrong zpub in the verifier). A precautionary hold is still placed, fail-safe.
+
+A frozen account can create no new invoices and its hosted pay pages stop, so no customer can pay a flagged address while it is investigated. The BoreLine team is alerted and is the only party who can lift a hold, after review. The server also runs the same check on its own on a schedule, and if corroborated mismatches show up across several accounts at once it treats the failure as server-level and halts everyone, rather than assuming a single account. None of this can touch funds; it only pauses new payment requests.
+
 ### Confirm payments, not just addresses
 
 Verifying the address proves funds can only land in your wallet. It does not prove a payment the server *reports* as received actually arrived, since that "paid" signal is the server's word. So both tools can also reconcile payments against the chain itself, using a source **you** choose:
