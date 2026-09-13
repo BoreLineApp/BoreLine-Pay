@@ -46,6 +46,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import derive  # the sibling module in verifiable-core/
@@ -58,7 +59,8 @@ def _load_config():
     """Merge, in order of precedence: CLI flags > env vars > verifier_config.json."""
     cfg = {"api_base": DEFAULT_API, "zpub": "", "verify_token": "", "previous_zpubs": [],
            "source": "esplora", "esplora_url": "https://mempool.space", "xcheck_url": "",
-           "electrum_host": "", "electrum_port": 50002, "electrum_ssl": True}
+           "electrum_host": "", "electrum_port": 50002, "electrum_ssl": True,
+           "telegram_bot_token": "", "telegram_chat_id": ""}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, encoding="utf-8") as f:
@@ -68,6 +70,8 @@ def _load_config():
     cfg["api_base"] = os.environ.get("BORELINE_API", cfg["api_base"])
     cfg["zpub"] = os.environ.get("BORELINE_ZPUB", cfg["zpub"])
     cfg["verify_token"] = os.environ.get("BORELINE_VERIFY_TOKEN", cfg["verify_token"])
+    cfg["telegram_bot_token"] = os.environ.get("BORELINE_TG_BOT_TOKEN", cfg["telegram_bot_token"])
+    cfg["telegram_chat_id"] = os.environ.get("BORELINE_TG_CHAT_ID", cfg["telegram_chat_id"])
     return cfg
 
 
@@ -98,6 +102,39 @@ def _post_report(api_base, token, inv_id, index, address):
                                            "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read().decode())
+
+
+# ── Phone alerts via your own Telegram bot ─────────────────────────────────
+# Optional. The Telegram Bot API is plain HTTPS, so this stays standard library
+# only. You create the bot with @BotFather, paste its token and your chat id,
+# and the verifier messages your phone the moment a check fails. It is YOUR bot,
+# talking to YOUR chat: BoreLine is not involved and sees none of it.
+_TG_ALERTED = set()  # de-dupe repeat alerts for the same problem within a run
+
+def _tg_send(cfg, text):
+    """Send a Telegram message via the merchant's own bot. Returns True on success,
+    False if not configured or on error."""
+    tok = (cfg.get("telegram_bot_token") or "").strip()
+    chat = (cfg.get("telegram_chat_id") or "").strip()
+    if not tok or not chat:
+        return False
+    url = f"https://api.telegram.org/bot{tok}/sendMessage"
+    data = urllib.parse.urlencode({"chat_id": chat, "text": text,
+                                   "disable_web_page_preview": "true"}).encode()
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=15) as r:
+            return getattr(r, "status", 200) == 200
+    except Exception as e:
+        print(f"[warn] Telegram notify failed: {e}")
+        return False
+
+def _tg_alert(cfg, key, text):
+    """Send an alert once per distinct problem within this run, so a persistent
+    issue does not re-message you every watch cycle."""
+    if key in _TG_ALERTED:
+        return
+    if _tg_send(cfg, text):
+        _TG_ALERTED.add(key)
 
 
 # ── Chain sources for payment confirmation ─────────────────────────────────
@@ -396,6 +433,11 @@ def _run(cfg):
             print(f"    invoice {iid} (m/0/{idx}): server said {addr} ; {why}")
         print("    Do not trust these invoices. Stop sharing new links and contact support.")
         rc = 1
+        _tg_alert(cfg, "mismatch:" + ",".join(sorted(str(m[0]) for m in mismatches)),
+                  "\U0001F6A8 BoreLine verifier ALARM\n\n"
+                  f"{len(mismatches)} invoice address(es) do NOT derive from your key. "
+                  "Funds sent to these could be redirected. Do not trust these invoices and contact support.\n"
+                  "Invoices: " + ", ".join(str(m[0]) for m in mismatches[:10]))
         # Optional: report the first mismatch, which freezes this account on the
         # server (no new invoices, hosted pay pages disabled) and alerts BoreLine.
         # Meant for unattended --watch monitoring so a breach is contained even
@@ -437,6 +479,12 @@ def _run(cfg):
                     print(f"    invoice {inv.get('id')} ({inv.get('address')}): {why}")
             print("    Do not fulfil an order the server calls paid until the funds are in your own wallet.")
             rc = 1
+            dids = sorted(str(inv.get("id", "?")) for sev, inv, _ in findings if sev == "danger")
+            _tg_alert(cfg, "payment:" + ",".join(dids),
+                      "⚠ BoreLine verifier: payment reconciliation\n\n"
+                      f"{dangers} discrepancy(ies) against {src}. An address that is not yours, or a "
+                      "'paid' the chain does not back. Do not fulfil those orders until funds are in "
+                      "your own wallet.\nInvoices: " + ", ".join(dids[:10]))
         else:
             print(f"[{stamp}] PAYMENTS OK: {okc} reconciled vs {src}"
                   + (f", {notes} informational." if notes else "."))
@@ -504,7 +552,7 @@ def _save_config_keys(cfg):
         except Exception:
             data = {}
     for k in ("api_base", "zpub", "previous_zpubs", "verify_token", "report",
-              "esplora_url", "source"):
+              "esplora_url", "source", "telegram_bot_token", "telegram_chat_id"):
         if k in cfg:
             data[k] = cfg[k]
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -524,8 +572,21 @@ def _setup_wizard(cfg):
     a = input(f"  API base [{cfg.get('api_base') or DEFAULT_API}]: ").strip()
     if a:
         cfg["api_base"] = a
+    print("\n  Phone alerts (optional). Create a bot with @BotFather on Telegram,")
+    print("  send it a message, then get your chat id from @userinfobot. Enter to skip.")
+    bt = input(f"  Telegram bot token [{_short(cfg.get('telegram_bot_token'))}]: ").strip()
+    if bt:
+        cfg["telegram_bot_token"] = bt
+    ci = input(f"  Telegram chat id [{_short(cfg.get('telegram_chat_id'))}]: ").strip()
+    if ci:
+        cfg["telegram_chat_id"] = ci
     _save_config_keys(cfg)
     print(f"\n  Saved to {CONFIG_FILE}")
+    if cfg.get("telegram_bot_token") and cfg.get("telegram_chat_id"):
+        if _tg_send(cfg, "BoreLine verifier: phone alerts are set up. You will be messaged here if a check ever fails."):
+            print("  Sent a test message to your Telegram. Check your phone.")
+        else:
+            print("  Could not send a test message. Double-check the bot token and chat id.")
     _pause()
 
 def _menu():
@@ -535,6 +596,7 @@ def _menu():
         configured = bool(cfg.get("zpub") and not cfg["zpub"].startswith("zpub...")
                           and cfg.get("verify_token"))
         report_on = bool(cfg.get("report"))
+        tg_on = bool(cfg.get("telegram_bot_token") and cfg.get("telegram_chat_id"))
         print("\n" + "=" * 54)
         print("   BORELINE ADDRESS VERIFIER")
         print("=" * 54)
@@ -546,6 +608,7 @@ def _menu():
         print("   [3] Confirm payments on chain")
         print("   [4] Set up or edit my keys")
         print("   [5] Auto report and freeze on mismatch: " + ("ON" if report_on else "off"))
+        print("   [6] Phone alerts (Telegram): " + ("ON, send a test" if tg_on else "off, set up in option 4"))
         print("   [q] Quit")
         print()
         sys.stdout.write("   Press a key: ")
@@ -604,6 +667,17 @@ def _menu():
                 print("  A mismatch will report and FREEZE the account with no further prompt.")
                 print("  A wrong zpub, or a previous zpub you have not added, will also trigger it.")
             _pause()
+        elif k == "6":
+            if tg_on:
+                print("\n  Sending a test message to your Telegram...")
+                if _tg_send(cfg, "BoreLine verifier: test alert. If you see this, phone alerts work."):
+                    print("  Sent. Check your phone.")
+                else:
+                    print("  Could not send. Check the bot token and chat id in option 4.")
+            else:
+                print("\n  Phone alerts are not set up yet. Choose option 4 and enter your")
+                print("  Telegram bot token and chat id.")
+            _pause()
         elif k in ("q", "\x03", "\x1b"):
             print("\n  Bye.")
             return 0
@@ -639,6 +713,10 @@ def main():
     ap.add_argument("--menu", action="store_true",
                     help="open the interactive menu (no flags to remember). This is what the "
                          "double-click launchers use.")
+    ap.add_argument("--telegram-bot-token",
+                    help="your own Telegram bot token (from @BotFather) for phone alerts on a mismatch")
+    ap.add_argument("--telegram-chat-id",
+                    help="the Telegram chat id to message (from @userinfobot)")
     args = ap.parse_args()
 
     # Interactive menu: when asked for, or when double-clicked / run bare in a real
@@ -666,6 +744,8 @@ def main():
     if args.xcheck_url: cfg["xcheck_url"] = args.xcheck_url
     elif args.xcheck: cfg["xcheck_url"] = "https://blockstream.info"
     if args.report: cfg["report"] = True
+    if args.telegram_bot_token: cfg["telegram_bot_token"] = args.telegram_bot_token
+    if args.telegram_chat_id: cfg["telegram_chat_id"] = args.telegram_chat_id
 
     if not cfg["zpub"] or cfg["zpub"].startswith("zpub...") or not cfg["verify_token"]:
         if not os.path.exists(CONFIG_FILE):

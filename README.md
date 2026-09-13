@@ -96,7 +96,7 @@ python test_vectors.py             # verify the code against the BIP84 spec
 
 Line up the output against your own wallet (Sparrow, Electrum, ...) and BoreLine's Verify page. If all three match, non-custody is proven, not promised. The module contains no secrets, no keys, and makes no network calls. See [`verifiable-core/README.md`](verifiable-core/README.md).
 
-This is not just a one-off check. The same toolkit also fetches your live invoice list and re-derives **every** address BoreLine has issued you, and it can run **continuously**: `verify.html` re-checks on a timer while the tab is open, and `verify_invoices.py --watch` runs it unattended as a scheduled job, so you can watch BoreLine around the clock and be alerted the moment an address does not derive from your key.
+This is not just a one-off check, and it is not just "derive your own addresses." Over a **read-only token** it fetches the addresses BoreLine actually issued for your invoices and **compares each against the one you derive locally from your own key**, two independent sources side by side. That is how you watch our server in real time without us revealing any secret. It can run **continuously**: `verify.html` re-checks on a timer while the tab is open, and `verify_invoices.py --watch` runs it unattended as a scheduled job (with an optional Telegram alert to your phone), so you are notified the moment an address does not derive from your key.
 
 Running the verifier is **optional**: you never need it to accept payments, and skipping it changes nothing about how you get paid. It exists so the most security-conscious merchants can check us instead of trusting us, and we publish it because we are paranoid about security ourselves.
 

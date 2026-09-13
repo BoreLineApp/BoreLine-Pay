@@ -64,9 +64,13 @@ If all three match, you have proven, without trusting BoreLine, that invoices pa
 - Output: native SegWit `bc1q...` (P2WPKH), per BIP84.
 - Fingerprint: `SHA-256(zpub)`, hex encoded.
 
-## Automatic verification: check every invoice, not a sample
+## It compares your own derivation against what BoreLine issued, live
 
-Reading addresses by hand does not scale. A merchant cannot eyeball every invoice against their wallet, and "verify a few and trust the rest" is exactly the gap a dishonest host would exploit. So the same derivation runs as a verifier that checks **every** invoice address against your own key, on your own machine. It re-derives `m/0/index` for each of your invoices and confirms it matches the address the server issued. Your key comes from you and this code comes from this repo, so a compromised server cannot pass the check by handing over a matching fake: it never supplies the key the check runs against.
+This is the part people miss: the verifier is **not** a toy that just prints addresses from your zpub. It is a live comparison. Using a **read-only verification token**, it fetches the actual list of addresses BoreLine issued for your invoices, and against every one it puts the address **you** derive locally from **your** key. Two independent sources, your key on your machine versus the server's live output, checked side by side. If they ever disagree, an address that does not derive from your key has been issued in your name, and you see it immediately.
+
+That is what lets you **watch BoreLine's server in real time without us revealing any secret**. The read-only token unlocks only this address feed, nothing that can move funds or read customer data, and your key never leaves your machine. So a compromised server cannot pass the check by handing over a matching fake, because it never supplies the key the check runs against. Run it continuously (see below) and you are alerted the moment something breaks, including a phone notification if you wire up a Telegram bot.
+
+Reading addresses by hand does not scale, and "verify a few and trust the rest" is exactly the gap a dishonest host would exploit, so the verifier checks **every** invoice, re-deriving `m/0/index` for each and confirming it matches the address the server issued.
 
 There are two forms, same logic. Pick whichever fits you.
 
@@ -144,6 +148,16 @@ Verifying the address proves funds can only land in your wallet. It does not pro
 For every paid or pending invoice that **is** yours, it then checks what the address actually received and compares it to what BoreLine reports. It counts only funds that arrived **at or after the invoice was created** (using the invoice's creation time, minus a small skew, exactly as the server does), so a reused address whose wallet already held funds is not mistaken for a payment. The important case it catches is a **"paid" we claim with no on-chain funds**: never fulfil that order. It also surfaces payments the chain shows that the server has not marked yet. In `verify.html` use the "Confirm payments on chain" panel; in the script add `--confirm` (and `--source electrum --electrum-host …` for your own node). The money is always in your own wallet, so the worst a dishonest server can do is misreport, and this is how you catch it.
 
 **Cross-check two explorers.** So that a single dishonest or lagging explorer cannot mislead you either, you can check every address against **two** independent sources and flag any disagreement: put a second URL in the "cross-check source" box in `verify.html`, or pass `--xcheck` (uses blockstream.info) or `--xcheck-url <esplora>` to the script. Your own node remains the fully trustless option.
+
+### Get a phone alert the moment something breaks
+
+The script can message your phone through **your own Telegram bot** if a check ever fails, so you do not have to watch a terminal. It is your bot talking to your chat; BoreLine is not involved and never sees it. Telegram's API is a plain HTTPS call, so this stays standard library only.
+
+1. In Telegram, message **@BotFather**, create a bot, and copy its **token**.
+2. Send your new bot any message, then message **@userinfobot** to get your numeric **chat id**.
+3. In the menu choose **4** and paste the token and chat id (it sends a test message), or pass `--telegram-bot-token` and `--telegram-chat-id`, or set `BORELINE_TG_BOT_TOKEN` and `BORELINE_TG_CHAT_ID`.
+
+Then run it unattended, for example `python verify_invoices.py --watch 300 --confirm`, and if an address ever fails to derive from your key, or a payment does not reconcile, you get a message on your phone, once per distinct problem so it does not spam you. Pair it with `--report` and the same event also freezes the account on the server.
 
 ### Getting the verification token
 
