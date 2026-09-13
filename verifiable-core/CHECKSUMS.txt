@@ -16,6 +16,6 @@ specification vector) and the air-gap test (run offline and it still works, so
 it sends nothing). See README.md.
 
 bb46cd8032741c90277cee1745accffbedc54fda5d5250fba83ec0c1f628940c  derive.py
-339f0c6257dba67be5af4b889b376fe28b190416acfba651e318d4f6d18d9d50  verify.html
-3f68057796de12c36980f145b915d1af53f406fea76f4be525bf313860d027d5  verify_invoices.py
+d095f200a910f7d03b6d3adec36ed0bdff79daa3de7aa8aed328576f550a7cf4  verify.html
+9c1e60714f3cda8a7856746db4d273744b537ea9708040772208a1baaa69300f  verify_invoices.py
 a7db9e09bc8df51396eb56e38959e6cb767a8c820c2c82dcff57a892d4e4bda5  test_vectors.py

@@ -346,6 +346,163 @@ def _run(cfg):
     return rc
 
 
+# ── Interactive menu ───────────────────────────────────────────────────────
+# A click-to-start, single-key menu so a merchant never has to remember flags.
+# Standard library only, so the whole tool stays dependency free and auditable.
+
+def _getch():
+    """Read one keypress without waiting for Enter, cross-platform. Falls back to
+    a line read if there is no real terminal (a pipe or redirect), so it never
+    blocks waiting on a console that is not there."""
+    try:
+        if not sys.stdin.isatty():
+            return (sys.stdin.readline().strip() or " ")[:1]
+    except Exception:
+        pass
+    try:
+        import msvcrt  # Windows
+        return msvcrt.getwch()
+    except ImportError:
+        pass
+    try:
+        import termios, tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        return ch
+    except Exception:
+        return (sys.stdin.readline().strip() or " ")[:1]
+
+def _pause():
+    print("\n  Press any key to return to the menu...")
+    _getch()
+
+def _short(v):
+    v = (v or "").strip()
+    if not v or v.startswith("zpub..."):
+        return "not set"
+    return (v[:10] + "…") if len(v) > 12 else v
+
+def _save_config_keys(cfg):
+    """Merge the editable keys into verifier_config.json, preserving anything else."""
+    data = {}
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+    for k in ("api_base", "zpub", "previous_zpubs", "verify_token", "report",
+              "esplora_url", "source"):
+        if k in cfg:
+            data[k] = cfg[k]
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def _setup_wizard(cfg):
+    print("\n  Enter your details. Press Enter alone to keep the current value.\n")
+    z = input(f"  Your zpub [{_short(cfg.get('zpub'))}]: ").strip()
+    if z:
+        cfg["zpub"] = z
+    p = input("  Previous zpub(s) after a rotation, comma separated, Enter to skip: ").strip()
+    if p:
+        cfg["previous_zpubs"] = [x.strip() for x in p.split(",") if x.strip()]
+    t = input(f"  Verification token [{_short(cfg.get('verify_token'))}]: ").strip()
+    if t:
+        cfg["verify_token"] = t
+    a = input(f"  API base [{cfg.get('api_base') or DEFAULT_API}]: ").strip()
+    if a:
+        cfg["api_base"] = a
+    _save_config_keys(cfg)
+    print(f"\n  Saved to {CONFIG_FILE}")
+    _pause()
+
+def _menu():
+    """Single-key interactive loop. Returns an exit code."""
+    while True:
+        cfg = _load_config()
+        configured = bool(cfg.get("zpub") and not cfg["zpub"].startswith("zpub...")
+                          and cfg.get("verify_token"))
+        report_on = bool(cfg.get("report"))
+        print("\n" + "=" * 54)
+        print("   BORELINE ADDRESS VERIFIER")
+        print("=" * 54)
+        print("   Keys : " + ("configured" if configured else "NOT SET — choose 4 first"))
+        print("   API  : " + (cfg.get("api_base") or DEFAULT_API))
+        print()
+        print("   [1] Check my addresses now")
+        print("   [2] Watch continuously (auto re-check)")
+        print("   [3] Confirm payments on chain")
+        print("   [4] Set up or edit my keys")
+        print("   [5] Auto report and freeze on mismatch: " + ("ON" if report_on else "off"))
+        print("   [q] Quit")
+        print()
+        sys.stdout.write("   Press a key: ")
+        sys.stdout.flush()
+        k = (_getch() or "").lower()
+        print(k if k.strip() else "")
+
+        if k == "1":
+            if not configured:
+                print("\n  Set up your keys first (option 4)."); _pause(); continue
+            try:
+                _run(dict(cfg))
+            except Exception as e:
+                print("  Error:", e)
+            _pause()
+        elif k == "2":
+            if not configured:
+                print("\n  Set up your keys first (option 4)."); _pause(); continue
+            raw = input("\n  Re-check every how many seconds [300]: ").strip()
+            try:
+                secs = max(15, int(raw)) if raw else 300
+            except ValueError:
+                secs = 300
+            print(f"  Watching every {secs}s. Press Ctrl+C to stop and return to the menu.\n")
+            c2 = dict(cfg)
+            try:
+                while True:
+                    try:
+                        _run(c2)
+                    except Exception as e:
+                        print("  [warn]", e)
+                    time.sleep(secs)
+            except KeyboardInterrupt:
+                print("\n  Stopped watching.")
+            _pause()
+        elif k == "3":
+            if not configured:
+                print("\n  Set up your keys first (option 4)."); _pause(); continue
+            c3 = dict(cfg)
+            c3["confirm"] = True
+            src = input(f"\n  Chain source Esplora URL [{c3.get('esplora_url') or 'https://mempool.space'}]: ").strip()
+            if src:
+                c3["esplora_url"] = src
+            try:
+                _run(c3)
+            except Exception as e:
+                print("  Error:", e)
+            _pause()
+        elif k == "4":
+            _setup_wizard(cfg)
+        elif k == "5":
+            cfg["report"] = not report_on
+            _save_config_keys(cfg)
+            print("\n  Auto report is now " + ("ON" if cfg["report"] else "off") + ".")
+            if cfg["report"]:
+                print("  A mismatch will report and FREEZE the account with no further prompt.")
+                print("  A wrong zpub, or a previous zpub you have not added, will also trigger it.")
+            _pause()
+        elif k in ("q", "\x03", "\x1b"):
+            print("\n  Bye.")
+            return 0
+        # any other key just redraws the menu
+
+
 def main():
     ap = argparse.ArgumentParser(description="Independent BoreLine invoice-address verifier.")
     ap.add_argument("--watch", type=int, metavar="SECONDS",
@@ -372,7 +529,19 @@ def main():
                     help="on a mismatch, report it to BoreLine, which FREEZES this account "
                          "(no new invoices, hosted pay pages disabled) and alerts the team. "
                          "Use with --watch for unattended monitoring.")
+    ap.add_argument("--menu", action="store_true",
+                    help="open the interactive menu (no flags to remember). This is what the "
+                         "double-click launchers use.")
     args = ap.parse_args()
+
+    # Interactive menu: when asked for, or when double-clicked / run bare in a real
+    # terminal. Never triggers under cron or a pipe (no TTY), so automation is unaffected.
+    if args.menu or (len(sys.argv) == 1 and sys.stdin.isatty() and sys.stdout.isatty()):
+        try:
+            return _menu()
+        except KeyboardInterrupt:
+            print("\n  Bye.")
+            return 0
 
     cfg = _load_config()
     if args.zpub:  cfg["zpub"] = args.zpub

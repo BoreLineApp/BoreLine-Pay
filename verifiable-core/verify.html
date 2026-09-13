@@ -77,6 +77,18 @@
       <a href="#" id="forget" style="font-size:11px;color:var(--dim)">Forget saved data</a>
     </div>
     <p class="foot" style="margin-top:6px">Remember stores your zpub and token in this browser only. Do not use it on a shared or public computer. If a device is lost, revoke the token from your dashboard.</p>
+
+    <div class="mon" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Live monitoring, optional</div>
+      <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="autorun"> Check automatically when I open this page</label>
+      <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="monitor"> Keep checking every
+        <input id="interval" type="number" min="1" max="1440" value="10" style="width:60px;display:inline-block;padding:4px 6px;margin:0 4px"> minutes</label>
+      <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="notify"> Show a desktop notification if a check fails</label>
+      <label class="chk"><input type="checkbox" id="autoreport"> Auto report and freeze on a hard mismatch</label>
+      <p class="foot" style="margin-top:6px">Monitoring runs only while this tab stays open. For always on, unattended checks even after you close the browser, use the command line script with its watch mode. Auto report freezes the account without asking first, so turn it on only if you understand that a wrong or previous zpub will also trip it.</p>
+      <div class="foot" id="monstatus" style="margin-top:6px;color:var(--gold2)"></div>
+    </div>
+
     <p class="foot" style="margin-top:10px">Self-test derives the published BIP84 specification vector and checks it against the known
       addresses. If it passes, this file's derivation is honest, independently of BoreLine. To prove it sends
       nothing, turn off your network and use offline mode: it still works, because all maths is local.</p>
@@ -194,12 +206,12 @@ function esc(x){return String(x==null?"":x).replace(/[<>&"']/g,c=>({"<":"&lt;","
 
 // The one flagged invoice a "Report and freeze" button will send, and the sender.
 let _flaggedForReport=null;
-async function reportMismatch(inv){
+async function reportMismatch(inv, auto){
   if(!inv){ return; }
   const api=$("api").value.trim().replace(/\/+$/,""); const token=$("token").value.trim();
-  if(!token){ alert("Enter your verification token first, then report."); return; }
-  if(!/^https:\/\//i.test(api)){ alert("The API base must be https:// before you report."); return; }
-  if(!confirm("Report this mismatch to BoreLine and FREEZE this account?\n\nNew invoices and hosted pay pages will stop immediately, until the BoreLine team reviews it. This protects your customers from paying an address that may not be yours.")) return;
+  if(!token){ if(!auto) alert("Enter your verification token first, then report."); return; }
+  if(!/^https:\/\//i.test(api)){ if(!auto) alert("The API base must be https:// before you report."); return; }
+  if(!auto && !confirm("Report this mismatch to BoreLine and FREEZE this account?\n\nNew invoices and hosted pay pages will stop immediately, until the BoreLine team reviews it. This protects your customers from paying an address that may not be yours.")) return;
   try{
     const r=await fetch(api+"/api/merchant/verify-report",{method:"POST",
       headers:{"Content-Type":"application/json","X-Verify-Token":token},
@@ -214,6 +226,28 @@ async function reportMismatch(inv){
 }
 const _reportBtnHtml='<div class="row" style="margin-top:12px"><button id="reportBtn" style="background:var(--bad);color:#fff">Report to BoreLine and freeze this account</button></div>';
 function _wireReportBtn(){ const rb=$("reportBtn"); if(rb) rb.addEventListener("click",()=>reportMismatch(_flaggedForReport)); }
+
+/* ── Live monitoring: auto-run, interval re-check, desktop notifications ── */
+let _monTimer=null, _monLastCheck=0;
+function _notify(msg){
+  try{
+    if(!("Notification" in window)) return;
+    if(Notification.permission==="granted"){ new Notification("BoreLine verifier", {body:msg}); }
+  }catch(e){}
+}
+function updateMonStatus(){
+  const el=$("monstatus"); if(!el) return;
+  const on = $("monitor") && $("monitor").checked;
+  const last = _monLastCheck ? new Date(_monLastCheck).toLocaleTimeString() : "not yet";
+  el.textContent = (on ? ("Monitoring on, re-checking every "+Math.max(1,parseInt($("interval").value||"10",10))+" min. ") : "Monitoring off. ") + "Last check: "+last+".";
+}
+function startMonitor(){
+  stopMonitor();
+  const mins=Math.max(1,Math.min(1440,parseInt($("interval").value||"10",10)));
+  _monTimer=setInterval(()=>{ doVerify(true); }, mins*60000);
+  updateMonStatus();
+}
+function stopMonitor(){ if(_monTimer){ clearInterval(_monTimer); _monTimer=null; } updateMonStatus(); }
 
 async function runVerify(invoices, currentHash){
   const zpub=extractZpub($("zpub").value);
@@ -274,12 +308,26 @@ async function runVerify(invoices, currentHash){
       +'<div class="counts">'+checked+' verified.</div>');
     $("results").innerHTML="";
   }
+
+  // Live-monitoring reactions, gated by the toggles.
+  _monLastCheck = Date.now();
+  updateMonStatus();
+  document.title = (bad.length ? "⚠ " : "") + "BoreLine Address Verifier";
+  if($("notify") && $("notify").checked && (bad.length || unv.length)){
+    _notify(bad.length
+      ? ("ALARM: " + bad.length + " address(es) do NOT derive from your key")
+      : (unv.length + " invoice(s) could not be verified against your key"));
+  }
+  // Auto report only a HARD mismatch, never an unverified (too false-positive prone).
+  if(bad.length && $("autoreport") && $("autoreport").checked){
+    reportMismatch(bad[0], true);
+  }
 }
 
-$("go").addEventListener("click",async()=>{
+async function doVerify(silent){
   const api=$("api").value.trim().replace(/\/+$/,"");const token=$("token").value.trim();
-  if(!token){setStatus("s-bad","Enter your verification token.");return;}
-  if(!/^https:\/\//i.test(api)){setStatus("s-bad","The API base must start with <code>https://</code>. Never send your token over an insecure or unfamiliar address.");return;}
+  if(!token){ if(!silent) setStatus("s-bad","Enter your verification token."); return; }
+  if(!/^https:\/\//i.test(api)){ if(!silent) setStatus("s-bad","The API base must start with <code>https://</code>. Never send your token over an insecure or unfamiliar address."); return; }
   if($("remember").checked){try{localStorage.setItem(LS,JSON.stringify({zpub:$("zpub").value.trim(),token,api}));}catch(e){}}
   else{try{localStorage.removeItem(LS);}catch(e){}}
   setStatus("s-work","Fetching your invoice list and re-deriving every address...");
@@ -292,7 +340,8 @@ $("go").addEventListener("click",async()=>{
     feed=await r.json();
   }catch(e){ setStatus("s-bad","Could not reach the API: "+esc(e.message)+". Check the API base, or use offline mode."); return; }
   await runVerify(feed.invoices||[], feed.current_zpub_hash||"");
-});
+}
+$("go").addEventListener("click",()=>doVerify(false));
 
 $("goOffline").addEventListener("click",async()=>{
   let feed;
@@ -302,6 +351,46 @@ $("goOffline").addEventListener("click",async()=>{
   $("results").innerHTML="";
   await runVerify(feed.invoices||[], feed.current_zpub_hash||"");
 });
+
+/* ── Monitoring preferences: persist independently of remembered credentials ── */
+const PREFS="boreline_verifier_prefs_v1";
+function savePrefs(){
+  try{ localStorage.setItem(PREFS, JSON.stringify({
+    autorun:$("autorun").checked, monitor:$("monitor").checked, interval:$("interval").value,
+    notify:$("notify").checked, autoreport:$("autoreport").checked
+  })); }catch(e){}
+}
+["autorun","monitor","interval","notify","autoreport"].forEach(id=>{
+  const el=$(id); if(!el) return;
+  el.addEventListener("change", async ()=>{
+    if(id==="notify" && el.checked){
+      if(!("Notification" in window)){ el.checked=false; setStatus("s-note","This browser does not support notifications."); }
+      else if(Notification.permission!=="granted"){
+        try{ await Notification.requestPermission(); }catch(e){}
+        if(Notification.permission!=="granted"){ el.checked=false; setStatus("s-note","Allow notifications for this page in your browser, then tick this again."); }
+      }
+    }
+    if(id==="autoreport" && el.checked){
+      if(!confirm("Auto report and freeze?\n\nIf a later check finds an address that does not derive from your key, this reports it and FREEZES the account with no further prompt. A wrong zpub, or a previous zpub you have not added, will also trigger it. Turn on only if you understand that.")){ el.checked=false; }
+    }
+    savePrefs();
+    if(id==="monitor"||id==="interval"){ if($("monitor").checked) startMonitor(); else stopMonitor(); }
+  });
+});
+(function initMonitor(){
+  try{
+    const p=JSON.parse(localStorage.getItem(PREFS)||"{}");
+    if(p.autorun) $("autorun").checked=true;
+    if(p.monitor) $("monitor").checked=true;
+    if(p.interval) $("interval").value=p.interval;
+    if(p.notify && ("Notification" in window) && Notification.permission==="granted") $("notify").checked=true;
+    if(p.autoreport) $("autoreport").checked=true;
+  }catch(e){}
+  updateMonStatus();
+  const haveCreds = $("zpub").value.trim() && $("token").value.trim();
+  if($("autorun").checked && haveCreds) doVerify(true);
+  if($("monitor").checked) startMonitor();
+})();
 
 /* ── Payment reconciliation: what the chain shows vs what the server reports ── */
 async function fetchFeed(api, token){

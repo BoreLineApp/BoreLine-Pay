@@ -74,18 +74,46 @@ There are two forms, same logic. Pick whichever fits you.
 
 Download `verify.html`, open it in your browser (it works straight from disk), and paste three things once: your **zpub**, a **verification token**, and the API base (defaults to `https://api.borelinepay.uk`). Press **Verify now**. It fetches your invoice list, re-derives every address, and shows all-clear or flags any mismatch. Tick "remember on this device" to store the values locally so you never retype them. All maths runs in your browser; your key is never sent anywhere.
 
+**Live monitoring (optional).** Under the buttons is a small monitoring panel so you do not have to click each time:
+
+- **Check automatically when I open this page** runs the check on load using your remembered values.
+- **Keep checking every N minutes** re-runs on a timer while the tab stays open (it becomes a live monitor).
+- **Show a desktop notification if a check fails** pops a browser notification on any problem, so you do not have to watch it.
+- **Auto report and freeze on a hard mismatch** is off by default; when you turn it on (it asks you to confirm), a hard mismatch is reported and the account frozen with no further prompt. It never fires on an "unverified" result, only on an address that truly does not derive from your key, so a rotation or a wrong zpub cannot auto-freeze you.
+
+Monitoring runs only while the tab is open. Closing the browser stops it, that is a hard limit of a single file that runs from your disk. For always on, unattended checks, use the script below with its watch mode.
+
 For an air-gapped setup, fetch the feed on another machine and paste the JSON into the tool's offline mode.
 
-### 2. `verify_invoices.py` — script, for automation and alerts
+### 2. `verify_invoices.py` — script, click to start or schedule
 
-For a headless check you can schedule:
+**No terminal needed to use it.** Double-click a launcher and a simple menu opens:
 
-```bash
-python verify_invoices.py            # one check
-python verify_invoices.py --watch 300  # re-check every 300 seconds
+- **Windows:** double-click `verify.bat`
+- **macOS / Linux:** double-click `verify.command` (on macOS the first time, right-click then Open; if it will not run, `chmod +x verify.command`)
+
+The menu is single-key, no flags to remember:
+
+```
+[1] Check my addresses now
+[2] Watch continuously (auto re-check)
+[3] Confirm payments on chain
+[4] Set up or edit my keys
+[5] Auto report and freeze on mismatch: on/off
+[q] Quit
 ```
 
-On first run it writes `verifier_config.json`; fill in your `zpub` and `verify_token` (or pass `--zpub`/`--token`, or set `BORELINE_ZPUB`/`BORELINE_VERIFY_TOKEN`). It exits `0` when every address matched your key and `1` on any mismatch, so you can wire it into cron and an alert. Standard library only, plus the `derive.py` next to it.
+Choose **4** once to paste your zpub, any previous zpub(s), and your verification token; it saves them to `verifier_config.json` next to the script so you only do it once. Then **1** checks now, **2** watches on a loop, **3** reconciles payments against the chain.
+
+**For automation / scheduling**, the flags still work exactly as before:
+
+```bash
+python verify_invoices.py              # one check
+python verify_invoices.py --watch 300  # re-check every 300 seconds
+python verify_invoices.py --watch 300 --report   # unattended: freeze on a mismatch
+```
+
+It exits `0` when every address matched your key and `1` on any mismatch, so you can wire it into cron and an alert. The menu only opens for an interactive run (double-click or a bare run in a terminal); under cron or a pipe it behaves as a plain one-shot, so scheduled jobs are unaffected. Standard library only, plus the `derive.py` next to it.
 
 ### After a wallet rotation, and why nothing is silently skipped
 

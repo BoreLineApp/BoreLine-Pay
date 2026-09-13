@@ -1,0 +1,3 @@
+# Keep launcher line endings correct on every platform.
+verifiable-core/verify.command text eol=lf
+verifiable-core/verify.bat     text eol=crlf
