@@ -106,8 +106,11 @@ The menu is single-key, no flags to remember, **you never type a command**:
 [5] Auto report and freeze on mismatch: on/off
 [6] Phone alerts (Telegram): on/off
 [7] Start automatically on reboot (opens a window): on/off   (Windows)
+[8] Erase all saved data and start clean
 [q] Quit
 ```
+
+Option **8** wipes everything the tool saved on the device (your zpub, token, previous zpubs, Telegram details, settings) and turns off auto start, after you type `ERASE` to confirm. It does not touch your BoreLine account or funds, and your token stays valid until you revoke it from the dashboard. `verify.html` has the same thing under **Erase all saved data**, which clears its browser storage.
 
 Choose **4** once to paste your zpub, any previous zpub(s), your verification token, and optionally your Telegram bot details for phone alerts; it saves them to `verifier_config.json` next to the script so you only do it once. Then **1** checks now, **2** watches on a loop, **3** reconciles payments against the chain, **6** sends a test alert to your phone.
 

@@ -644,6 +644,24 @@ def _disable_autostart():
     except Exception as e:
         return False, str(e)
 
+def _erase_all():
+    """Delete the saved config and remove the auto-start entry, back to a clean
+    slate. Does not touch the BoreLine account or any funds. Returns a list of
+    what was removed."""
+    removed = []
+    try:
+        if os.path.exists(CONFIG_FILE):
+            os.remove(CONFIG_FILE)
+            removed.append("saved settings (verifier_config.json)")
+    except Exception as e:
+        print("  [warn] could not delete config:", e)
+    if _autostart_enabled():
+        okd, _ = _disable_autostart()
+        if okd:
+            removed.append("auto start on reboot")
+    _TG_ALERTED.clear()
+    return removed
+
 def _menu():
     """Single-key interactive loop. Returns an exit code."""
     while True:
@@ -667,6 +685,7 @@ def _menu():
         print("   [6] Phone alerts (Telegram): " + ("ON, send a test" if tg_on else "off, set up in option 4"))
         if _is_windows():
             print("   [7] Start automatically on reboot (opens a window): " + ("ON" if auto_on else "off"))
+        print("   [8] Erase all saved data and start clean")
         print("   [q] Quit")
         print()
         sys.stdout.write("   Press a key: ")
@@ -756,6 +775,21 @@ def _menu():
                     print("  window; to turn this off, come back here and press 7.")
                 else:
                     print(f"\n  Could not enable auto start: {info}")
+            _pause()
+        elif k == "8":
+            print("\n  This erases everything saved on THIS device: your zpub, verification")
+            print("  token, previous zpubs, Telegram alert details and settings, and it turns")
+            print("  off auto start. Your BoreLine account, your wallet and your funds are NOT")
+            print("  affected, and your token stays valid (revoke it from your dashboard if you")
+            print("  want to kill access).")
+            c = input("\n  Type ERASE to confirm, or press Enter to cancel: ").strip()
+            if c == "ERASE":
+                removed = _erase_all()
+                if removed:
+                    print("\n  Removed: " + "; ".join(removed) + ".")
+                print("  Clean slate. Choose option 4 to set up again whenever you like.")
+            else:
+                print("\n  Cancelled, nothing was deleted.")
             _pause()
         elif k in ("q", "\x03", "\x1b"):
             print("\n  Bye.")

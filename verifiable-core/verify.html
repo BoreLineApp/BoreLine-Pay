@@ -74,7 +74,7 @@
       <button id="go">Verify now</button>
       <button class="ghost" id="selftest">Self-test</button>
       <label class="chk"><input type="checkbox" id="remember"> Remember on this device</label>
-      <a href="#" id="forget" style="font-size:11px;color:var(--dim)">Forget saved data</a>
+      <a href="#" id="forget" style="font-size:11px;color:var(--dim)">Erase all saved data</a>
     </div>
     <p class="foot" style="margin-top:6px">Remember stores your zpub and token in this browser only. Do not use it on a shared or public computer. If a device is lost, revoke the token from your dashboard.</p>
 
@@ -199,7 +199,24 @@ async function deriveAddress(zpub,index){const raw=b58dec(zpub.trim());if(raw.le
 const $=(id)=>document.getElementById(id);
 const LS="boreline_verifier_v1";
 try{const saved=JSON.parse(localStorage.getItem(LS)||"{}");if(saved.zpub)$("zpub").value=saved.zpub;if(saved.token)$("token").value=saved.token;if(saved.api)$("api").value=saved.api;if(saved.zpub||saved.token)$("remember").checked=true;}catch(e){}
-$("forget").addEventListener("click",(e)=>{e.preventDefault();try{localStorage.removeItem(LS);}catch(_){}$("zpub").value="";$("token").value="";if($("prevzpubs"))$("prevzpubs").value="";$("remember").checked=false;setStatus("s-ok","Saved data cleared from this browser. This does not revoke your token, do that from your dashboard.");});
+$("forget").addEventListener("click",(e)=>{
+  e.preventDefault();
+  if(!confirm("Erase everything this page saved on this device?\n\nYour zpub, token, previous zpubs and all monitoring settings will be cleared. This does not revoke your token (do that from your dashboard) and does not touch your BoreLine account or funds.")) return;
+  // Clear saved credentials and monitoring preferences.
+  try{ localStorage.removeItem(LS); }catch(_){}
+  try{ localStorage.removeItem(PREFS); }catch(_){}
+  // Reset the form fields.
+  $("zpub").value=""; $("token").value=""; if($("prevzpubs")) $("prevzpubs").value="";
+  if($("feed")) $("feed").value=""; if($("src2")) $("src2").value="";
+  $("remember").checked=false;
+  // Reset and stop live monitoring.
+  ["autorun","monitor","notify","autoreport"].forEach(id=>{ if($(id)) $(id).checked=false; });
+  if($("interval")) $("interval").value="10";
+  try{ stopMonitor(); }catch(_){}
+  document.title="BoreLine Address Verifier";
+  $("results").innerHTML="";
+  setStatus("s-ok","Clean slate. Everything this page saved on this device was erased. Your token is still valid until you revoke it from your dashboard.");
+});
 
 function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";}
 function esc(x){return String(x==null?"":x).replace(/[<>&"']/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c]));}
