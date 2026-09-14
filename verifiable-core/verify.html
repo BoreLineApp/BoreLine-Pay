@@ -78,16 +78,18 @@
     </div>
     <p class="foot" style="margin-top:6px">Remember stores your zpub and token in this browser only. Do not use it on a shared or public computer. If a device is lost, revoke the token from your dashboard.</p>
 
-    <div class="mon" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
-      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Live monitoring, optional</div>
-      <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="autorun"> Check automatically when I open this page</label>
-      <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="monitor"> Keep checking every
-        <input id="interval" type="number" min="1" max="1440" value="10" style="width:60px;display:inline-block;padding:4px 6px;margin:0 4px"> minutes</label>
-      <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="notify"> Show a desktop notification if a check fails</label>
-      <label class="chk"><input type="checkbox" id="autoreport"> Auto report and freeze on a hard mismatch</label>
-      <p class="foot" style="margin-top:6px">Monitoring runs only while this tab stays open. For always on, unattended checks even after you close the browser, use the command line script with its watch mode. Auto report freezes the account without asking first, so turn it on only if you understand that a wrong or previous zpub will also trip it.</p>
-      <div class="foot" id="monstatus" style="margin-top:6px;color:var(--gold2)"></div>
-    </div>
+    <details class="mon" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <summary style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);cursor:pointer">Live monitoring, optional</summary>
+      <div style="margin-top:10px">
+        <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="autorun"> Check automatically when I open this page</label>
+        <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="monitor"> Keep checking every
+          <input id="interval" type="number" min="1" max="1440" value="10" style="width:60px;display:inline-block;padding:4px 6px;margin:0 4px"> minutes</label>
+        <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="notify"> Show a desktop notification if a check fails</label>
+        <label class="chk"><input type="checkbox" id="autoreport"> Auto report and freeze on a hard mismatch</label>
+        <p class="foot" style="margin-top:6px">Monitoring runs only while this tab stays open. For always on, unattended checks even after you close the browser, use the command line script with its watch mode. Auto report freezes the account without asking first, so turn it on only if you understand that a wrong or previous zpub will also trip it.</p>
+      </div>
+    </details>
+    <div class="foot" id="monstatus" style="margin-top:6px;color:var(--gold2)"></div>
 
     <p class="foot" style="margin-top:10px">Self-test derives the published BIP84 specification vector and checks it against the known
       addresses. If it passes, this file's derivation is honest, independently of BoreLine. To prove it sends
@@ -103,20 +105,22 @@
     </details>
   </div>
 
-  <div class="panel">
-    <div style="font-size:13px;color:#e2d9c8;font-weight:500;margin-bottom:5px">Confirm payments on chain (optional)</div>
-    <p class="foot" style="margin:0 0 12px">Go past checking addresses: reconcile what the blockchain actually shows against what BoreLine reports. Catches a "paid" we claim with no on-chain funds, or a payment you received that we did not surface. Needs your zpub and token above, plus a chain source.</p>
-    <label for="src">Chain source (Esplora API)</label>
-    <input id="src" spellcheck="false" value="https://mempool.space">
-    <p class="foot" style="margin-top:4px">Public explorers: <code>https://mempool.space</code> or <code>https://blockstream.info</code>. Your own node: the URL of your self-hosted mempool or Esplora instance, which is the private choice since the source sees which addresses you look up. For a bare Bitcoin Core or Electrum server, use the command-line script instead.</p>
-    <label for="src2">Cross-check source (optional, a second explorer)</label>
-    <input id="src2" spellcheck="false" placeholder="https://blockstream.info">
-    <p class="foot" style="margin-top:4px">If set, every address is checked against both sources and any disagreement is flagged, so one dishonest or lagging explorer is not enough to mislead you. Leave blank to skip.</p>
-    <div class="row"><button class="ghost" id="goPay">Confirm payments</button></div>
-  </div>
-
   <div id="status"></div>
   <div id="results"></div>
+
+  <details class="panel">
+    <summary style="font-size:13px;color:#e2d9c8;font-weight:500;cursor:pointer">Confirm payments on chain (optional)</summary>
+    <div style="margin-top:12px">
+      <p class="foot" style="margin:0 0 12px">Go past checking addresses: reconcile what the blockchain actually shows against what BoreLine reports. Catches a "paid" we claim with no on-chain funds, or a payment you received that we did not surface. Needs your zpub and token above, plus a chain source.</p>
+      <label for="src">Chain source (Esplora API)</label>
+      <input id="src" spellcheck="false" value="https://mempool.space">
+      <p class="foot" style="margin-top:4px">Public explorers: <code>https://mempool.space</code> or <code>https://blockstream.info</code>. Your own node: the URL of your self-hosted mempool or Esplora instance, which is the private choice since the source sees which addresses you look up. For a bare Bitcoin Core or Electrum server, use the command-line script instead.</p>
+      <label for="src2">Cross-check source (optional, a second explorer)</label>
+      <input id="src2" spellcheck="false" placeholder="https://blockstream.info">
+      <p class="foot" style="margin-top:4px">If set, every address is checked against both sources and any disagreement is flagged, so one dishonest or lagging explorer is not enough to mislead you. Leave blank to skip.</p>
+      <div class="row"><button class="ghost" id="goPay">Confirm payments</button></div>
+    </div>
+  </details>
 
   <div class="foot">
     <b>How it works.</b> BIP84 derivation is deterministic: one zpub plus one index gives exactly one
@@ -218,7 +222,7 @@ $("forget").addEventListener("click",(e)=>{
   setStatus("s-ok","Clean slate. Everything this page saved on this device was erased. Your token is still valid until you revoke it from your dashboard.");
 });
 
-function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";}
+function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";try{const r=s.getBoundingClientRect();if(r.top<0||r.bottom>window.innerHeight){s.scrollIntoView({behavior:"smooth",block:"center"});}}catch(e){}}
 function esc(x){return String(x==null?"":x).replace(/[<>&"']/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c]));}
 
 // The one flagged invoice a "Report and freeze" button will send, and the sender.
