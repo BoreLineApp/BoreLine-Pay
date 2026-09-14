@@ -29,6 +29,9 @@
   .chk{ display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--dim); }
   .chk input{ width:16px; height:16px; accent-color:var(--gold); }
   #status{ display:none; border-radius:5px; padding:16px 18px; margin-bottom:16px; font-size:14px; border:1px solid; }
+  @keyframes sbFlash{ 0%{ box-shadow:0 0 0 2px rgba(240,180,41,.6);} 100%{ box-shadow:0 0 0 2px rgba(240,180,41,0);} }
+  .sb-flash{ animation:sbFlash .9s ease-out; }
+  @media(prefers-reduced-motion:reduce){ .sb-flash{ animation:none; } }
   .s-ok{ color:var(--ok); border-color:rgba(16,185,129,.35); background:rgba(16,185,129,.06); }
   .s-bad{ color:var(--bad); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.07); }
   .s-work{ color:var(--gold2); border-color:rgba(212,175,55,.3); background:rgba(212,175,55,.05); }
@@ -222,7 +225,12 @@ $("forget").addEventListener("click",(e)=>{
   setStatus("s-ok","Clean slate. Everything this page saved on this device was erased. Your token is still valid until you revoke it from your dashboard.");
 });
 
-function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";try{const r=s.getBoundingClientRect();if(r.top<0||r.bottom>window.innerHeight){s.scrollIntoView({behavior:"smooth",block:"center"});}}catch(e){}}
+function setStatus(cls,html){const s=$("status");s.className="";s.classList.add(cls);s.innerHTML=html;s.style.display="block";
+  // Replay a brief flash so a repeat check registers visibly, even when the
+  // verdict text is unchanged (e.g. "All clear" every cycle while monitoring).
+  s.classList.remove("sb-flash"); void s.offsetWidth; s.classList.add("sb-flash");
+  try{const r=s.getBoundingClientRect();if(r.top<0||r.bottom>window.innerHeight){s.scrollIntoView({behavior:"smooth",block:"center"});}}catch(e){}}
+function _nowTime(){ try{ return new Date().toLocaleTimeString(); }catch(e){ return ""; } }
 function esc(x){return String(x==null?"":x).replace(/[<>&"']/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c]));}
 
 // The one flagged invoice a "Report and freeze" button will send, and the sender.
@@ -310,7 +318,7 @@ async function runVerify(invoices, currentHash){
     t+='</table>';
     _flaggedForReport=bad[0];
     setStatus("s-bad","<b>ALARM: "+bad.length+" address(es) do NOT derive from your key.</b>"
-      +'<div class="counts">'+checked+' verified'+(unv.length?', '+unv.length+' unverified':'')+'. Do not trust the flagged invoices. Stop sharing new links and contact support.</div>');
+      +'<div class="counts">'+checked+' verified'+(unv.length?', '+unv.length+' unverified':'')+'. Do not trust the flagged invoices. Stop sharing new links and contact support. Last checked '+_nowTime()+'.</div>');
     $("results").innerHTML='<div class="panel">'+t
       +'<p class="foot" style="margin-top:12px">Reporting freezes this account on BoreLine (no new invoices, hosted pay pages disabled) and alerts the BoreLine team, so no customer can pay a flagged address while it is investigated.</p>'
       +_reportBtnHtml+'</div>'+(unv.length?'<div class="panel">'+unvTable()+'</div>':'');
@@ -318,7 +326,7 @@ async function runVerify(invoices, currentHash){
   } else if(unv.length){
     _flaggedForReport=unv[0];
     setStatus("s-note","<b>"+unv.length+" invoice(s) could not be verified against your key</b>, tagged as another wallet."
-      +'<div class="counts">'+checked+' verified. If you rotated your wallet, add the previous zpub(s) above to clear these. If you did NOT rotate, treat them as suspicious: a server cannot hide a substituted address, only mislabel it, and this is that label.</div>');
+      +'<div class="counts">'+checked+' verified. If you rotated your wallet, add the previous zpub(s) above to clear these. If you did NOT rotate, treat them as suspicious: a server cannot hide a substituted address, only mislabel it, and this is that label. Last checked '+_nowTime()+'.</div>');
     $("results").innerHTML='<div class="panel">'+unvTable()
       +'<p class="foot" style="margin-top:12px">If you did not rotate your wallet, report it: BoreLine freezes this account and investigates. If the server can prove the address was substituted, the freeze becomes a hard alarm; otherwise it is a precautionary hold you can ask BoreLine to lift once you confirm you used the right zpub.</p>'
       +_reportBtnHtml+'</div>';
@@ -326,7 +334,7 @@ async function runVerify(invoices, currentHash){
   } else {
     _flaggedForReport=null;
     setStatus("s-ok","<b>All clear.</b> Every address the server issued derives from your key."
-      +'<div class="counts">'+checked+' verified.</div>');
+      +'<div class="counts">'+checked+' verified. Last checked '+_nowTime()+'.</div>');
     $("results").innerHTML="";
   }
 
