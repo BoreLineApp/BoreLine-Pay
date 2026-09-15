@@ -188,26 +188,43 @@ def _scripthash(address):
     spk = b"\x00" + bytes([len(program)]) + program
     return hashlib.sha256(spk).digest()[::-1].hex()
 
+def _addr_url_seg(address):
+    """Return a URL-safe path segment for an address that came from the server.
+    The server is exactly what this tool audits, so its address string is
+    untrusted: percent-encode it so a crafted value cannot inject extra path
+    segments, a query string, or newlines into the explorer request. A valid
+    bech32 address is all unreserved characters, so this is a no-op for honest
+    data and only neutralises malicious input."""
+    return urllib.parse.quote(str(address or ""), safe="")
+
 def _esplora_balance(base, address):
-    url = base.rstrip("/") + "/api/address/" + address
+    url = base.rstrip("/") + "/api/address/" + _addr_url_seg(address)
     with _open(url, timeout=20) as r:
         d = json.loads(r.read().decode())
     conf = (d.get("chain_stats") or {}).get("funded_txo_sum", 0)
     mem  = (d.get("mempool_stats") or {}).get("funded_txo_sum", 0)
     return int(conf), int(mem)
 
-def _electrum_balance(host, port, use_ssl, scripthash, timeout=20):
+def _electrum_balance(host, port, use_ssl, scripthash, timeout=20, insecure=False):
     import socket, ssl as _ssl
     s = socket.create_connection((host, int(port)), timeout=timeout)
     try:
         if use_ssl:
-            # Self-hosted Electrum servers commonly use a self-signed cert, which
-            # standard Electrum clients accept. This is your own node, so we do
-            # not fail on that.
             ctx = _ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = _ssl.CERT_NONE
-            s = ctx.wrap_socket(s, server_hostname=host)
+            if insecure:
+                # Opt-in only: accept a self-signed certificate on a node YOU
+                # control. Standard Electrum servers commonly use one, but this
+                # disables MITM protection on the link, so it is off by default
+                # and never assumed for you.
+                ctx.check_hostname = False
+                ctx.verify_mode = _ssl.CERT_NONE
+            try:
+                s = ctx.wrap_socket(s, server_hostname=host)
+            except _ssl.SSLCertVerificationError:
+                raise ValueError(
+                    "Electrum server certificate could not be verified. If this is "
+                    "your own self-signed node, set \"electrum_ssl_insecure\": true "
+                    "in verifier_config.json to accept it.")
         req = json.dumps({"id": 1, "method": "blockchain.scripthash.get_balance",
                           "params": [scripthash]}) + "\n"
         s.sendall(req.encode())
@@ -232,7 +249,8 @@ def _chain_received(cfg, address):
         if not cfg.get("electrum_host"):
             raise ValueError("electrum source selected but no electrum_host set")
         return _electrum_balance(cfg["electrum_host"], cfg.get("electrum_port", 50002),
-                                 bool(cfg.get("electrum_ssl", True)), _scripthash(address))
+                                 bool(cfg.get("electrum_ssl", True)), _scripthash(address),
+                                 insecure=bool(cfg.get("electrum_ssl_insecure", False)))
     return _esplora_balance(cfg.get("esplora_url") or "https://mempool.space", address)
 
 def _min_ts_for_inv(inv):
@@ -257,7 +275,7 @@ def _esplora_received_since(base, address, min_ts, need):
     address total, so funds that predate the invoice are excluded. Returns
     (confirmed, mempool, conf_paid, mem_paid) where *_paid means a single
     qualifying tx sent at least `need`, matching the server's rule."""
-    url = base.rstrip("/") + "/api/address/" + address + "/txs"
+    url = base.rstrip("/") + "/api/address/" + _addr_url_seg(address) + "/txs"
     with _open(url, timeout=20) as r:
         txs = json.loads(r.read().decode())
     confirmed = mempool = 0
