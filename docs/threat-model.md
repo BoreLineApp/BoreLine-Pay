@@ -33,7 +33,7 @@ By design, not by policy:
 
 **BoreLine's server or database is compromised.** An attacker still cannot spend your funds (no private keys exist to steal) and cannot silently reroute them, because the server enforces a SHA-256 fingerprint check on the stored ZPUB before deriving any address. If the stored key were altered, derivation halts and the account locks. The blast radius is limited to public data and one-way hashes.
 
-**A network attacker (man in the middle).** Traffic is TLS. Login and wallet-change authorizations are single-use, challenge-bound signatures, so a captured request cannot be replayed.
+**A network attacker (man in the middle).** Traffic is TLS. Login, wallet-change, key-management and account-deletion authorizations are single-use, challenge-bound signatures, so a captured request cannot be replayed.
 
 **Your hardware device is lost or stolen.** This is the one that matters. Whoever holds your device and PIN can act as you. Report it so wallet changes are suspended, move funds using your seed backup on a fresh device, and re-register.
 
