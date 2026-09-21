@@ -2,6 +2,8 @@
 
 ### Accept Bitcoin. Own every sat.
 
+*BoreLine Pay is a service of **BoreLine App**.*
+
 [![Website](https://img.shields.io/badge/website-boreline.app-f0b429)](https://boreline.app) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Custody](https://img.shields.io/badge/custody-non--custodial-2ea043) ![Transaction fees](https://img.shields.io/badge/transaction%20fees-0%25-f0b429) ![Bitcoin](https://img.shields.io/badge/Bitcoin-BIP84%20native%20SegWit-f7931a)
 
 **Non-custodial Bitcoin payment infrastructure.** Accept Bitcoin payments that settle directly to a wallet only you control. BoreLine never holds, touches, or is able to move your funds at any point.
